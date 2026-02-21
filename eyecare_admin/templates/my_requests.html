@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Requests - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/my-requests" class="active"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="page-header">
+                <h1>My Requests Status Tracker</h1>
+                <p>Track the status of your submitted requests</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>My Submitted Requests</h3>
+                    <button class="btn btn-primary" onclick="loadMyRequests()"><i class="material-icons">refresh</i> Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Action Type</th>
+                                    <th>Status</th>
+                                    <th>Details</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requestsTable">
+                                <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Request History Timeline Modal -->
+            <div id="historyModal" class="history-modal" style="display: none;">
+                <div class="history-modal-content" style="max-width: 800px;">
+                    <div class="history-modal-header">
+                        <h3><i class="material-icons">timeline</i> Request History Timeline</h3>
+                        <span class="history-modal-close" onclick="closeHistoryModal()">&times;</span>
+                    </div>
+                    <div class="history-modal-body">
+                        <div id="requestDetails" style="margin-bottom: 24px;">
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                                <div>
+                                    <strong>Action Type:</strong>
+                                    <p id="detailActionType" style="color: var(--gray-700); margin: 4px 0 0 0;"></p>
+                                </div>
+                                <div>
+                                    <strong>Current Status:</strong>
+                                    <p id="detailStatus" style="margin: 4px 0 0 0;"></p>
+                                </div>
+                                <div>
+                                    <strong>Submitted:</strong>
+                                    <p id="detailCreated" style="color: var(--gray-700); margin: 4px 0 0 0;"></p>
+                                </div>
+                                <div>
+                                    <strong>Last Updated:</strong>
+                                    <p id="detailUpdated" style="color: var(--gray-700); margin: 4px 0 0 0;"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 style="margin-bottom: 16px; color: var(--gray-700);">Approval Timeline</h4>
+                        <div id="timelineContainer" class="timeline-container">
+                            <!-- Timeline items will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        async function loadMyRequests() {
+            try {
+                const data = await apiRequest('/approvals/my-requests');
+                renderRequests(data.requests || []);
+            } catch (error) {
+                showAlert('Failed to load requests', 'error');
+            }
+        }
+
+        function renderRequests(requests) {
+            const tbody = document.getElementById('requestsTable');
+            
+            if (requests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No requests found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = requests.map(req => `
+                <tr>
+                    <td>${formatDate(req.created_at)}</td>
+                    <td><span class="badge badge-info">${formatActionType(req.action_type)}</span></td>
+                    <td>${getStatusBadge(req.status)}</td>
+                    <td>
+                        ${req.status === 'rejected' && req.rejection_reason ? 
+                            `<span style="color: #e74c3c;"><i class="material-icons" style="font-size: 14px; vertical-align: middle;">info</i> ${req.rejection_reason}</span>` : 
+                            '<span style="color: #999;">—</span>'
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick='showHistoryTimeline(${JSON.stringify(req).replace(/'/g, "&#39;")})'>
+                            <i class="material-icons">timeline</i> View History
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function showHistoryTimeline(request) {
+            // Set request details
+            document.getElementById('detailActionType').innerHTML = `<span class="badge badge-info">${formatActionType(request.action_type)}</span>`;
+            document.getElementById('detailStatus').innerHTML = getStatusBadge(request.status);
+            document.getElementById('detailCreated').textContent = formatDateTime(request.created_at);
+            document.getElementById('detailUpdated').textContent = formatDateTime(request.updated_at || request.created_at);
+
+            // Build timeline
+            const timelineContainer = document.getElementById('timelineContainer');
+            let timelineHTML = '';
+
+            // Step 1: Request Submitted (always present)
+            timelineHTML += `
+                <div class="timeline-item completed">
+                    <div class="timeline-icon"><i class="material-icons">send</i></div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Request Submitted</div>
+                        <div class="timeline-time">${formatDateTime(request.created_at)}</div>
+                        <div class="timeline-detail">Submitted by ${request.requester_name || 'You'}</div>
+                    </div>
+                </div>
+            `;
+
+            // Step 2: Admin Review
+            const adminCompleted = request.status !== 'pending_admin';
+            const adminClass = adminCompleted ? 'completed' : (request.status === 'pending_admin' ? 'active' : 'pending');
+            
+            if (request.status === 'rejected' && !request.admin_reviewed_at) {
+                // Rejected at initial stage
+                timelineHTML += `
+                    <div class="timeline-item completed rejected">
+                        <div class="timeline-icon"><i class="material-icons">cancel</i></div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">Request Rejected</div>
+                            <div class="timeline-time">${formatDateTime(request.updated_at || request.created_at)}</div>
+                            ${request.rejection_reason ? `<div class="timeline-detail" style="color: #e74c3c;">Reason: ${request.rejection_reason}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                timelineHTML += `
+                    <div class="timeline-item ${adminClass}">
+                        <div class="timeline-icon"><i class="material-icons">${adminCompleted ? 'check_circle' : 'hourglass_empty'}</i></div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">Admin Review</div>
+                            ${request.admin_reviewed_at ? 
+                                `<div class="timeline-time">${formatDateTime(request.admin_reviewed_at)}</div>
+                                 <div class="timeline-detail">Reviewed by ${request.admin_reviewer_name || 'Admin'}</div>` : 
+                                '<div class="timeline-detail">Waiting for admin review</div>'
+                            }
+                        </div>
+                    </div>
+                `;
+
+                // Step 3: Super Admin Approval (only if forwarded to super admin)
+                if (request.status === 'pending_super_admin' || request.status === 'approved' || (request.status === 'rejected' && request.super_admin_reviewed_at)) {
+                    const superAdminCompleted = request.status === 'approved' || (request.status === 'rejected' && request.super_admin_reviewed_at);
+                    const superAdminClass = superAdminCompleted ? 'completed' : 'active';
+                    const isRejected = request.status === 'rejected' && request.super_admin_reviewed_at;
+                    
+                    timelineHTML += `
+                        <div class="timeline-item ${superAdminClass} ${isRejected ? 'rejected' : ''}">
+                            <div class="timeline-icon"><i class="material-icons">${isRejected ? 'cancel' : (superAdminCompleted ? 'verified' : 'hourglass_empty')}</i></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">${isRejected ? 'Request Rejected by Super Admin' : 'Super Admin Approval'}</div>
+                                ${request.super_admin_reviewed_at ? 
+                                    `<div class="timeline-time">${formatDateTime(request.super_admin_reviewed_at)}</div>
+                                     <div class="timeline-detail">${isRejected ? 'Rejected' : 'Approved'} by ${request.super_admin_name || 'Super Admin'}</div>
+                                     ${isRejected && request.rejection_reason ? `<div class="timeline-detail" style="color: #e74c3c;">Reason: ${request.rejection_reason}</div>` : ''}` : 
+                                    '<div class="timeline-detail">Waiting for super admin approval</div>'
+                                }
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Step 4: Action Executed (only if approved)
+                if (request.status === 'approved') {
+                    timelineHTML += `
+                        <div class="timeline-item completed success">
+                            <div class="timeline-icon"><i class="material-icons">done_all</i></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">Action Executed Successfully</div>
+                                <div class="timeline-time">${formatDateTime(request.super_admin_reviewed_at)}</div>
+                                <div class="timeline-detail">Your request has been completed</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            timelineContainer.innerHTML = timelineHTML;
+            document.getElementById('historyModal').style.display = 'flex';
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            return date.toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+        }
+
+        function formatActionType(type) {
+            const typeMap = {
+                'retrain_model': 'Retrain Model',
+                'delete_user': 'Delete User',
+                'create_health_tip': 'Create Health Tip',
+                'update_health_tip': 'Update Health Tip',
+                'delete_health_tip': 'Delete Health Tip'
+            };
+            return typeMap[type] || type;
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'pending_admin': '<span class="badge badge-warning">Pending Admin Review</span>',
+                'pending_super_admin': '<span class="badge badge-info">Pending Super Admin</span>',
+                'approved': '<span class="badge badge-success">Approved & Completed</span>',
+                'rejected': '<span class="badge badge-danger">Rejected</span>'
+            };
+            return badges[status] || status;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSession();
+            loadMyRequests();
+            // Auto-refresh every 30 seconds
+            setInterval(loadMyRequests, 30000);
+        });
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

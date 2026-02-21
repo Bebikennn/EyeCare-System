@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings" class="active"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="page-header">
+                <h1>System Settings</h1>
+                <p>Configure system preferences and account settings</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h3>Profile Settings</h3></div>
+                <div class="card-body">
+                    <form id="profileForm">
+                        <div class="form-group">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" id="profileName" class="form-control" value="Administrator">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" id="profileEmail" class="form-control" value="admin@eyecare.com">
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="updateProfile()">Save Profile</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h3>Change Password</h3></div>
+                <div class="card-body">
+                    <form id="passwordForm">
+                        <div class="form-group">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" id="currentPassword" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">New Password</label>
+                            <input type="password" id="newPassword" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Confirm New Password</label>
+                            <input type="password" id="confirmPassword" class="form-control" required>
+                        </div>
+                        <button type="button" class="btn btn-warning" onclick="changePassword()">Change Password</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h3>System Information</h3></div>
+                <div class="card-body">
+                    <p><strong>System Name:</strong> EyeCare Admin Dashboard</p>
+                    <p><strong>Version:</strong> 1.0.0</p>
+                    <p><strong>Environment:</strong> Production</p>
+                    <p><strong>Database:</strong> SQLite</p>
+                    <p><strong>ML Model:</strong> LightGBM v1.0</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentAdmin = null;
+
+        async function loadProfile() {
+            try {
+                const response = await apiRequest('/admin/profile');
+                currentAdmin = response.admin;
+                document.getElementById('profileName').value = currentAdmin.full_name || '';
+                document.getElementById('profileEmail').value = currentAdmin.email || '';
+            } catch (error) {
+                console.error('Failed to load profile:', error);
+            }
+        }
+
+        async function updateProfile() {
+            const fullName = document.getElementById('profileName').value.trim();
+            const email = document.getElementById('profileEmail').value.trim();
+
+            if (!fullName || !email) {
+                showAlert('Please fill in all fields', 'error');
+                return;
+            }
+
+            try {
+                await apiRequest('/admin/profile', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        email: email
+                    })
+                });
+                showAlert('Profile updated successfully!', 'success');
+            } catch (error) {
+                showAlert(error.message || 'Failed to update profile', 'error');
+            }
+        }
+
+        async function changePassword() {
+            const current = document.getElementById('currentPassword').value;
+            const newPass = document.getElementById('newPassword').value;
+            const confirm = document.getElementById('confirmPassword').value;
+
+            if (!current || !newPass || !confirm) {
+                showAlert('Please fill in all password fields', 'error');
+                return;
+            }
+
+            if (newPass !== confirm) {
+                showAlert('Passwords do not match!', 'error');
+                return;
+            }
+
+            if (newPass.length < 6) {
+                showAlert('Password must be at least 6 characters', 'error');
+                return;
+            }
+
+            try {
+                await apiRequest('/admin/change-password', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        current_password: current,
+                        new_password: newPass
+                    })
+                });
+                showAlert('Password changed successfully!', 'success');
+                document.getElementById('passwordForm').reset();
+            } catch (error) {
+                showAlert(error.message || 'Failed to change password', 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            await checkSession();
+            await loadProfile();
+        });
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

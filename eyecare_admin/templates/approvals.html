@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Approvals - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+    <style>
+        .filter-section {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .filter-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .search-box-large {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box-large input {
+            width: 100%;
+            padding: 10px 10px 10px 40px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border 0.3s;
+        }
+
+        .search-box-large input:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+
+        .search-box-large .material-icons {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+            font-size: 20px;
+        }
+
+        .filter-group select {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 150px;
+            transition: border 0.3s;
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+
+        .card-header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .filter-group {
+                flex-direction: column;
+            }
+
+            .filter-group select {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals" class="active"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <!-- Permission Warning -->
+            <div id="permissionWarning" class="permission-warning" style="display: none;">
+                <div class="warning-icon"><i class="material-icons">info</i></div>
+                <div class="warning-content">
+                    <h3>Information</h3>
+                    <p>You are logged in as <span id="currentRoleDisplay"></span>. This page is for reviewing approval requests.</p>
+                    <p>To submit a new request, please visit <a href="/my-requests" style="color: #1E88E5; font-weight: 600;">My Requests</a> page.</p>
+                </div>
+            </div>
+
+            <div class="page-header">
+                <h1>Pending Approvals</h1>
+                <p>Review and approve actions from other administrators</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Pending Requests</h3>
+                    <div class="card-header-actions">
+                        <button class="btn btn-outline" onclick="loadApprovals()"><i class="material-icons">refresh</i> Refresh</button>
+                    </div>
+                </div>
+                
+                <!-- Filter and Search Section -->
+                <div class="filter-section">
+                    <div class="filter-group">
+                        <div class="search-box-large">
+                            <i class="material-icons">search</i>
+                            <input type="text" id="searchInput" placeholder="Search by requester, action type..." onkeyup="filterApprovals()">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <select id="actionTypeFilter" onchange="filterApprovals()">
+                            <option value="">All Action Types</option>
+                            <option value="create_health_tip">Create Health Tip</option>
+                            <option value="retrain_model">Retrain Model</option>
+                            <option value="delete_user">Delete User</option>
+                        </select>
+                        <select id="statusFilter" onchange="filterApprovals()">
+                            <option value="">All Statuses</option>
+                            <option value="pending_admin">Pending Admin</option>
+                            <option value="pending_super_admin">Pending Super Admin</option>
+                        </select>
+                        <select id="dateFilter" onchange="filterApprovals()">
+                            <option value="">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="clearFilters()">
+                            <i class="material-icons">clear</i> Clear Filters
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Requester</th>
+                                    <th>Role</th>
+                                    <th>Action</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="approvalsBody">
+                                <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentAdminRole = null;
+        let allApprovals = []; // Store all approvals for filtering
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            const admin = await checkSession();
+            currentAdminRole = admin.role;
+            updatePageTitle();
+            checkPagePermissions();
+            loadApprovals();
+        });
+
+        function updatePageTitle() {
+            const titleElement = document.querySelector('.page-header h1');
+            const descElement = document.querySelector('.page-header p');
+            
+            if (currentAdminRole === 'super_admin') {
+                titleElement.textContent = 'Global Approval Queue';
+                descElement.textContent = 'Final review and approval of all pending requests';
+            } else if (currentAdminRole === 'admin') {
+                titleElement.textContent = 'Review Queue';
+                descElement.textContent = 'Review requests from Data Analysts and Staff, then forward to Super Admin';
+            }
+        }
+
+        function checkPagePermissions() {
+            const userRole = sessionStorage.getItem('role');
+            const staffRoles = ['staff', 'data_analyst'];
+            
+            // Only show warning for staff/data_analyst roles
+            if (userRole && staffRoles.includes(userRole)) {
+                document.getElementById('permissionWarning').style.display = 'flex';
+                document.getElementById('currentRoleDisplay').textContent = formatRole(userRole);
+                
+                // Disable approval action buttons for staff
+                setTimeout(() => {
+                    const actionButtons = document.querySelectorAll('.btn-success, .btn-danger');
+                    actionButtons.forEach(btn => {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                        btn.title = 'You do not have permission to review approvals';
+                    });
+                }, 500);
+            }
+        }
+
+        function formatRole(role) {
+            const roleMap = {
+                'staff': 'Staff',
+                'data_analyst': 'Data Analyst',
+                'admin': 'Admin',
+                'super_admin': 'Super Admin'
+            };
+            return roleMap[role] || role;
+        }
+
+        async function loadApprovals() {
+            try {
+                const response = await apiRequest('/approvals/');
+                allApprovals = response.approvals || [];
+                displayApprovals(allApprovals);
+            } catch (error) {
+                console.error('Error loading approvals:', error);
+                document.getElementById('approvalsBody').innerHTML = 
+                    '<tr><td colspan="6" class="text-center" style="color: #e74c3c;">Error loading approvals</td></tr>';
+            }
+        }
+
+        function displayApprovals(approvals) {
+            const tbody = document.getElementById('approvalsBody');
+            tbody.innerHTML = '';
+
+            if (!approvals || approvals.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="color: #999;">No pending approvals found</td></tr>';
+                return;
+            }
+
+            approvals.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${formatDate(item.created_at)}</td>
+                    <td>${item.requester_name}</td>
+                    <td><span class="badge badge-info">${formatRole(item.requester_role)}</span></td>
+                    <td><span class="badge badge-warning">${formatAction(item.action_type)}</span></td>
+                    <td>${getStatusBadge(item.status)}</td>
+                    <td>${getActionButtons(item)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterApprovals() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const actionType = document.getElementById('actionTypeFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+
+            let filtered = allApprovals.filter(approval => {
+                // Search filter
+                const matchesSearch = !searchTerm || 
+                    approval.requester_name.toLowerCase().includes(searchTerm) ||
+                    formatAction(approval.action_type).toLowerCase().includes(searchTerm);
+
+                // Action type filter
+                const matchesActionType = !actionType || approval.action_type === actionType;
+
+                // Status filter
+                const matchesStatus = !status || approval.status === status;
+
+                // Date filter
+                let matchesDate = true;
+                if (dateFilter) {
+                    const approvalDate = new Date(approval.created_at);
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    
+                    if (dateFilter === 'today') {
+                        matchesDate = approvalDate >= today;
+                    } else if (dateFilter === 'week') {
+                        const weekAgo = new Date(today);
+                        weekAgo.setDate(weekAgo.getDate() - 7);
+                        matchesDate = approvalDate >= weekAgo;
+                    } else if (dateFilter === 'month') {
+                        const monthAgo = new Date(today);
+                        monthAgo.setMonth(monthAgo.getMonth() - 1);
+                        matchesDate = approvalDate >= monthAgo;
+                    }
+                }
+
+                return matchesSearch && matchesActionType && matchesStatus && matchesDate;
+            });
+
+            displayApprovals(filtered);
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('actionTypeFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            displayApprovals(allApprovals);
+        }
+
+        function formatRole(role) {
+            const roleMap = {
+                'super_admin': 'Super Admin',
+                'admin': 'Admin',
+                'data_analyst': 'Data Analyst',
+                'staff': 'Staff'
+            };
+            return roleMap[role] || role;
+        }
+
+        function formatAction(action) {
+            const actionMap = {
+                'retrain_model': 'Retrain Model',
+                'delete_user': 'Delete User',
+                'create_health_tip': 'Create Health Tip',
+                'update_health_tip': 'Update Health Tip',
+                'delete_health_tip': 'Delete Health Tip'
+            };
+            return actionMap[action] || action.replace(/_/g, ' ');
+        }
+
+        function getStatusBadge(status) {
+            if (status === 'pending_admin') {
+                return '<span class="badge badge-warning">Pending Admin</span>';
+            } else if (status === 'pending_super_admin') {
+                return '<span class="badge badge-info">Pending Super Admin</span>';
+            }
+            return '<span class="badge">' + status + '</span>';
+        }
+
+        function getActionButtons(item) {
+            if (currentAdminRole === 'super_admin') {
+                // Super Admin sees Accept/Deny
+                return `
+                    <button class="btn btn-sm btn-success" onclick="acceptAction(${item.id})" title="Accept and Execute">
+                        <i class="material-icons" style="font-size: 16px;">check_circle</i> Accept
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="denyAction(${item.id})" title="Deny Request">
+                        <i class="material-icons" style="font-size: 16px;">cancel</i> Deny
+                    </button>
+                `;
+            } else if (currentAdminRole === 'admin') {
+                // Admin sees Confirm & Forward / Deny
+                return `
+                    <button class="btn btn-sm btn-primary" onclick="confirmForward(${item.id})" title="Confirm and Forward to Super Admin">
+                        <i class="material-icons" style="font-size: 16px;">forward</i> Confirm & Forward
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="denyAction(${item.id})" title="Deny Request">
+                        <i class="material-icons" style="font-size: 16px;">cancel</i> Deny
+                    </button>
+                `;
+            }
+            return '';
+        }
+
+        async function confirmForward(id) {
+            if (!confirm('Confirm this request and forward to Super Admin for final approval?')) return;
+            
+            try {
+                const response = await apiRequest(`/approvals/${id}/confirm-forward`, { method: 'POST' });
+                showAlert(response.message || 'Request confirmed and forwarded', 'success');
+                loadApprovals();
+            } catch (error) {
+                showAlert(error.message || 'Failed to confirm request', 'error');
+            }
+        }
+
+        async function acceptAction(id) {
+            if (!confirm('Accept and execute this action? This action is FINAL.')) return;
+            
+            try {
+                const response = await apiRequest(`/approvals/${id}/accept`, { method: 'POST' });
+                showAlert(response.message || 'Action accepted and executed successfully', 'success');
+                loadApprovals();
+            } catch (error) {
+                showAlert(error.message || 'Failed to accept action', 'error');
+            }
+        }
+
+        async function denyAction(id) {
+            const reason = prompt('Enter reason for denial (optional):');
+            if (reason === null) return; // Cancelled
+            
+            try {
+                const response = await apiRequest(`/approvals/${id}/deny`, { 
+                    method: 'POST',
+                    body: JSON.stringify({ reason: reason || 'No reason provided' })
+                });
+                showAlert(response.message || 'Request denied', 'success');
+                loadApprovals();
+            } catch (error) {
+                showAlert(error.message || 'Failed to deny request', 'error');
+            }
+        }
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

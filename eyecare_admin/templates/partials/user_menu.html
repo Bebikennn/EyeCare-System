@@ -1,0 +1,18 @@
+<!-- User Menu (Profile Dropdown) -->
+<div class="user-menu" id="userMenu">
+    <button type="button" class="user-profile" id="userMenuToggle" aria-haspopup="true" aria-expanded="false" onclick="toggleUserMenu(event)">
+        <div class="user-avatar">A</div>
+        <div class="user-info">
+            <span class="name" id="adminName">Admin</span>
+            <span class="role" id="adminRole">Super Admin</span>
+        </div>
+        <i class="material-icons user-menu-caret" aria-hidden="true">expand_more</i>
+    </button>
+
+    <div class="user-menu-dropdown" id="userMenuDropdown" role="menu" aria-labelledby="userMenuToggle" style="display: none;">
+        <button type="button" class="user-menu-item" role="menuitem" onclick="logout()">
+            <i class="material-icons" aria-hidden="true">logout</i>
+            <span>Logout</span>
+        </button>
+    </div>
+</div>

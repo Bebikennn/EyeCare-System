@@ -1,0 +1,72 @@
+@startuml
+' eyecare_admin (Admin Dashboard) - Use Case Diagram
+' Generated: 2026-02-06
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor "Admin (Staff)" as Staff
+actor "Data Analyst" as Analyst
+actor "Super Admin" as SuperAdmin
+actor "Email Service" as Email
+
+rectangle "eyecare_admin: Admin Dashboard" {
+  (Admin Login) as UC_AdminLogin
+  (Admin Logout) as UC_AdminLogout
+  (Reset Admin Password) as UC_ResetAdminPwd
+
+  (Manage Users) as UC_ManageUsers
+  (View User Details) as UC_ViewUser
+
+  (Review Assessments) as UC_ReviewAssessments
+  (View Assessment Details) as UC_AssessmentDetails
+
+  (Manage Health Tips) as UC_ManageTips
+  (View Notifications) as UC_Notifications
+  (View Activity Logs) as UC_Logs
+  (View Reports/Analytics) as UC_Reports
+
+  (View Model Metrics) as UC_Metrics
+  (Upload Dataset) as UC_Upload
+  (Request Retraining) as UC_RequestRetrain
+  (Approve Pending Actions) as UC_Approve
+  (Retrain Risk Model) as UC_Retrain
+}
+
+' Staff/admin capabilities
+Staff --> UC_AdminLogin
+Staff --> UC_AdminLogout
+Staff --> UC_ManageUsers
+Staff --> UC_ViewUser
+Staff --> UC_ReviewAssessments
+Staff --> UC_AssessmentDetails
+Staff --> UC_ManageTips
+Staff --> UC_Notifications
+Staff --> UC_Logs
+Staff --> UC_Reports
+Staff --> UC_Metrics
+
+' Analyst capabilities
+Analyst --> UC_AdminLogin
+Analyst --> UC_AdminLogout
+Analyst --> UC_Upload
+Analyst --> UC_RequestRetrain
+Analyst --> UC_Metrics
+Analyst --> UC_Reports
+
+' Super Admin capabilities
+SuperAdmin --> UC_AdminLogin
+SuperAdmin --> UC_AdminLogout
+SuperAdmin --> UC_Upload
+SuperAdmin --> UC_Approve
+SuperAdmin --> UC_Retrain
+SuperAdmin --> UC_Metrics
+SuperAdmin --> UC_Reports
+
+UC_RequestRetrain ..> UC_Approve : <<include>>
+UC_Approve ..> UC_Retrain : <<include>>
+
+Email <-- UC_ResetAdminPwd
+
+@enduml

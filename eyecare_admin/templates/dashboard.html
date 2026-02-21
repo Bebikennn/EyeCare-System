@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>EyeCare</h2>
+            <p>Admin Dashboard</p>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard" class="active"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Navbar -->
+        <div class="top-navbar">
+            <div class="navbar-left">
+                <button class="menu-toggle" onclick="toggleSidebar()">
+                    <i class="material-icons">menu</i>
+                </button>
+                <div class="search-box">
+                    <i class="material-icons">search</i>
+                    <input type="text" placeholder="Search...">
+                </div>
+            </div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content-area">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <p>Welcome to EyeCare Admin Panel - Overview of system metrics and activities</p>
+            </div>
+
+            <!-- Date Range Selector -->
+            <div class="date-range-selector">
+                <label><i class="material-icons" style="vertical-align: middle; font-size: 18px;">date_range</i> Time Period:</label>
+                <select id="dateRangeSelect" onchange="handleDateRangeChange()">
+                    <option value="7">Last 7 Days</option>
+                    <option value="30" selected>Last 30 Days</option>
+                    <option value="90">Last 90 Days</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+                <div id="customDateInputs" style="display: none; gap: 8px;">
+                    <input type="date" id="startDate" />
+                    <span>to</span>
+                    <input type="date" id="endDate" />
+                </div>
+                <button class="btn btn-primary" onclick="refreshDashboard()" title="Refresh Dashboard">
+                    <i class="material-icons">refresh</i> Refresh
+                </button>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card clickable" role="button" tabindex="0" data-stat="users">
+                    <div class="stat-icon blue">
+                        <i class="material-icons">people</i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalUsers">0</h3>
+                        <p>Total Users</p>
+                        <span class="stat-trend up" id="userTrendContainer"><i class="material-icons" id="userTrendIcon">arrow_upward</i> <span id="userTrendText">0% from last month</span></span>
+                    </div>
+                </div>
+
+                <div class="stat-card clickable" role="button" tabindex="0" data-stat="high_risk">
+                    <div class="stat-icon red">
+                        <i class="material-icons">warning</i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="highRiskCases">0</h3>
+                        <p>High Risk Cases</p>
+                        <span class="stat-trend up" id="riskTrendContainer"><i class="material-icons" id="riskTrendIcon">arrow_upward</i> <span id="riskTrendText">0% increase</span></span>
+                    </div>
+                </div>
+
+                <div class="stat-card clickable" role="button" tabindex="0" data-stat="assessments_today">
+                    <div class="stat-icon green">
+                        <i class="material-icons">assessment</i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="assessmentsToday">0</h3>
+                        <p>Assessments Today</p>
+                        <span class="stat-trend up" id="assessmentTrendContainer"><i class="material-icons" id="assessmentTrendIcon">arrow_upward</i> <span id="assessmentTrendText">0 new today</span></span>
+                    </div>
+                </div>
+
+                <div class="stat-card clickable" role="button" tabindex="0" data-stat="ml_analytics">
+                    <div class="stat-icon purple">
+                        <i class="material-icons">psychology</i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="mlAccuracy">92.45%</h3>
+                        <p>LightGBM Accuracy</p>
+                        <span class="stat-trend up"><i class="material-icons">arrow_upward</i> Model v1.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stat Card Details Modal -->
+            <div id="statCardModal" class="modal-overlay" style="display: none;">
+                <div class="modal" style="max-width: 560px;">
+                    <div class="modal-header">
+                        <h2 id="statCardModalTitle">Details</h2>
+                        <button class="modal-close" onclick="closeModal('statCardModal')">&times;</button>
+                    </div>
+                    <div class="modal-body" id="statCardModalBody"></div>
+                    <div class="modal-footer" id="statCardModalFooter">
+                        <button class="btn btn-outline" onclick="closeModal('statCardModal')">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Risk Distribution</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="riskPieChart" height="300"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 id="assessmentsChartTitle">Assessments (Last 7 Days)</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="assessmentsLineChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RBAC Analytics Widget -->
+            <div class="card" id="rbacAnalyticsCard" style="display: none;">
+                <div class="card-header">
+                    <h3><i class="material-icons" style="vertical-align: middle;">verified</i> RBAC Approval Analytics</h3>
+                    <a href="/approvals" class="btn btn-primary btn-sm">View Queue</a>
+                </div>
+                <div class="card-body">
+                    <div class="rbac-stats-grid">
+                        <div class="rbac-stat-box pending">
+                            <div class="rbac-stat-icon"><i class="material-icons">pending_actions</i></div>
+                            <div class="rbac-stat-info">
+                                <h2 id="totalPending">0</h2>
+                                <p>Pending Approvals</p>
+                            </div>
+                        </div>
+                        <div class="rbac-stat-box approved">
+                            <div class="rbac-stat-icon"><i class="material-icons">check_circle</i></div>
+                            <div class="rbac-stat-info">
+                                <h2 id="totalApproved">0</h2>
+                                <p>Approved</p>
+                            </div>
+                        </div>
+                        <div class="rbac-stat-box rejected">
+                            <div class="rbac-stat-icon"><i class="material-icons">cancel</i></div>
+                            <div class="rbac-stat-info">
+                                <h2 id="totalRejected">0</h2>
+                                <p>Rejected</p>
+                            </div>
+                        </div>
+                        <div class="rbac-stat-box time">
+                            <div class="rbac-stat-icon"><i class="material-icons">schedule</i></div>
+                            <div class="rbac-stat-info">
+                                <h2 id="avgApprovalTime">0h</h2>
+                                <p>Avg Approval Time</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rbac-charts-grid">
+                        <div class="rbac-chart-container">
+                            <h4>Action Types</h4>
+                            <canvas id="actionTypesChart" height="200"></canvas>
+                        </div>
+                        <div class="rbac-chart-container">
+                            <h4>Recent Activity (7 Days)</h4>
+                            <canvas id="activityChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Users -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Recent Users</h3>
+                    <a href="/users" class="btn btn-primary btn-sm">View All</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table" id="recentUsersTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Assessments</th>
+                                    <th>Joined</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentUsersBody">
+                                <tr>
+                                    <td colspan="6" class="text-center">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Recent Activity</h3>
+                    <a href="/logs" class="btn btn-outline btn-sm">View All Logs</a>
+                </div>
+                <div class="card-body">
+                    <div id="recentActivityList">
+                        <p class="text-center text-muted">Loading activity...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script>
+        let statsData = {};
+        let assessmentsData = [];
+        let userStatsData = null;
+        let assessmentStatsData = null;
+        let currentDateRange = 30; // Default 30 days
+        let customStartDate = null;
+        let customEndDate = null;
+
+        function getCurrentPeriodLabel() {
+            const select = document.getElementById('dateRangeSelect');
+            if (select && select.value === 'custom') {
+                const start = customStartDate || document.getElementById('startDate')?.value;
+                const end = customEndDate || document.getElementById('endDate')?.value;
+                if (start && end) return `Custom range: ${start} to ${end}`;
+                return 'Custom range';
+            }
+            return `Last ${currentDateRange || 30} days`;
+        }
+
+        function buildAssessmentsLink(extraParams = {}) {
+            const params = getDateRangeParams();
+
+            // The assessments page uses start/end/days, not API endpoints directly.
+            Object.entries(extraParams).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    params.set(key, String(value));
+                }
+            });
+
+            const qs = params.toString();
+            return qs ? `/assessments?${qs}` : '/assessments';
+        }
+
+        function openStatCardModal(statType) {
+            const titleEl = document.getElementById('statCardModalTitle');
+            const bodyEl = document.getElementById('statCardModalBody');
+            const footerEl = document.getElementById('statCardModalFooter');
+            if (!titleEl || !bodyEl || !footerEl) return;
+
+            const periodLabel = getCurrentPeriodLabel();
+
+            if (statType === 'users') {
+                titleEl.textContent = 'Users';
+                const total = userStatsData?.total_users ?? document.getElementById('totalUsers')?.textContent ?? '0';
+                const active = userStatsData?.active_users ?? '0';
+                const blocked = userStatsData?.blocked_users ?? '0';
+                const archived = userStatsData?.archived_users ?? '0';
+
+                bodyEl.innerHTML = `
+                    <p class="text-muted mb-2">Total registered users.</p>
+                    <div class="card" style="box-shadow: none; border: 1px solid var(--gray-200); margin: 0;">
+                        <div class="card-body" style="padding: 16px;">
+                            <div class="d-flex justify-between mb-1"><strong>Total</strong><span>${total}</span></div>
+                            <div class="d-flex justify-between mb-1"><span class="text-muted">Active</span><span>${active}</span></div>
+                            <div class="d-flex justify-between mb-1"><span class="text-muted">Blocked</span><span>${blocked}</span></div>
+                            <div class="d-flex justify-between"><span class="text-muted">Archived</span><span>${archived}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                footerEl.innerHTML = `
+                    <button class="btn btn-outline" onclick="closeModal('statCardModal')">Close</button>
+                    <button class="btn btn-primary" onclick="window.location.href='/users'">View Users</button>
+                `;
+            } else if (statType === 'high_risk') {
+                titleEl.textContent = 'High Risk Cases';
+                const high = assessmentStatsData?.high_risk ?? document.getElementById('highRiskCases')?.textContent ?? '0';
+                const moderate = assessmentStatsData?.moderate_risk ?? '0';
+                const low = assessmentStatsData?.low_risk ?? '0';
+
+                bodyEl.innerHTML = `
+                    <p class="text-muted mb-2">Risk distribution for <strong>${periodLabel}</strong>.</p>
+                    <div class="card" style="box-shadow: none; border: 1px solid var(--gray-200); margin: 0;">
+                        <div class="card-body" style="padding: 16px;">
+                            <div class="d-flex justify-between mb-1"><strong>High</strong><span>${high}</span></div>
+                            <div class="d-flex justify-between mb-1"><span class="text-muted">Moderate</span><span>${moderate}</span></div>
+                            <div class="d-flex justify-between"><span class="text-muted">Low</span><span>${low}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                footerEl.innerHTML = `
+                    <button class="btn btn-outline" onclick="closeModal('statCardModal')">Close</button>
+                    <button class="btn btn-primary" onclick="window.location.href='${buildAssessmentsLink({ risk_level: 'high' })}'">View High Risk</button>
+                `;
+            } else if (statType === 'assessments_today') {
+                titleEl.textContent = 'Assessments Today';
+                const todayCount = assessmentStatsData?.assessments_today ?? document.getElementById('assessmentsToday')?.textContent ?? '0';
+                const today = new Date().toISOString().split('T')[0];
+
+                bodyEl.innerHTML = `
+                    <p class="text-muted mb-2">Assessments created today (<strong>${today}</strong>).</p>
+                    <div class="card" style="box-shadow: none; border: 1px solid var(--gray-200); margin: 0;">
+                        <div class="card-body" style="padding: 16px;">
+                            <div class="d-flex justify-between"><strong>Count</strong><span>${todayCount}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                footerEl.innerHTML = `
+                    <button class="btn btn-outline" onclick="closeModal('statCardModal')">Close</button>
+                    <button class="btn btn-primary" onclick="window.location.href='/assessments?start_date=${today}&end_date=${today}'">View Today</button>
+                `;
+            } else if (statType === 'ml_analytics') {
+                titleEl.textContent = 'ML Analytics';
+                const accuracy = document.getElementById('mlAccuracy')?.textContent ?? 'N/A';
+
+                bodyEl.innerHTML = `
+                    <p class="text-muted mb-2">Open model analytics and management.</p>
+                    <div class="card" style="box-shadow: none; border: 1px solid var(--gray-200); margin: 0;">
+                        <div class="card-body" style="padding: 16px;">
+                            <div class="d-flex justify-between"><strong>Accuracy</strong><span>${accuracy}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                footerEl.innerHTML = `
+                    <button class="btn btn-outline" onclick="closeModal('statCardModal')">Close</button>
+                    <button class="btn btn-primary" onclick="window.location.href='/ml-analytics'">Open ML Analytics</button>
+                `;
+            } else {
+                titleEl.textContent = 'Details';
+                bodyEl.innerHTML = '<p class="text-muted">No details available.</p>';
+                footerEl.innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'statCardModal\')">Close</button>';
+            }
+
+            openModal('statCardModal');
+        }
+
+        function initClickableStatCards() {
+            const cards = document.querySelectorAll('.stat-card.clickable[data-stat]');
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    openStatCardModal(card.dataset.stat);
+                });
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openStatCardModal(card.dataset.stat);
+                    }
+                });
+            });
+        }
+
+        function getDateRangeParams() {
+            const select = document.getElementById('dateRangeSelect');
+            const params = new URLSearchParams();
+
+            if (select && select.value === 'custom') {
+                if (customStartDate) params.set('start_date', customStartDate);
+                if (customEndDate) params.set('end_date', customEndDate);
+            } else {
+                params.set('days', String(currentDateRange || 30));
+            }
+
+            return params;
+        }
+
+        function withParams(endpoint, extraParams = {}) {
+            const params = getDateRangeParams();
+            Object.entries(extraParams).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    params.set(key, String(value));
+                }
+            });
+
+            const queryString = params.toString();
+            return queryString ? `${endpoint}?${queryString}` : endpoint;
+        }
+
+        function updateAssessmentsChartTitle() {
+            const titleEl = document.getElementById('assessmentsChartTitle');
+            if (!titleEl) return;
+
+            const select = document.getElementById('dateRangeSelect');
+            if (select && select.value === 'custom') {
+                titleEl.textContent = 'Assessments (Custom Range)';
+            } else {
+                titleEl.textContent = `Assessments (Last ${currentDateRange || 30} Days)`;
+            }
+        }
+
+        // Date range handler
+        function handleDateRangeChange() {
+            const select = document.getElementById('dateRangeSelect');
+            const customInputs = document.getElementById('customDateInputs');
+            
+            if (select.value === 'custom') {
+                customInputs.style.display = 'flex';
+                // Set default dates
+                const today = new Date();
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                
+                document.getElementById('endDate').value = today.toISOString().split('T')[0];
+                document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+            } else {
+                customInputs.style.display = 'none';
+                currentDateRange = parseInt(select.value);
+                refreshDashboard();
+            }
+        }
+
+        // Refresh dashboard with new date range
+        function refreshDashboard() {
+            const select = document.getElementById('dateRangeSelect');
+            
+            if (select.value === 'custom') {
+                customStartDate = document.getElementById('startDate').value;
+                customEndDate = document.getElementById('endDate').value;
+                
+                if (!customStartDate || !customEndDate) {
+                    showToast('Please select both start and end dates', 'error');
+                    return;
+                }
+            } else {
+                currentDateRange = parseInt(select.value);
+                customStartDate = null;
+                customEndDate = null;
+            }
+
+            updateAssessmentsChartTitle();
+            loadDashboard();
+        }
+        async function loadDashboard() {
+            try {
+                // Check session
+                await checkSession();
+
+                // Load stats
+                await Promise.all([
+                    loadUserStats(),
+                    loadAssessmentStats(),
+                    loadMLMetrics(),
+                    loadRecentUsers(),
+                    loadRecentActivity()
+                ]);
+
+                // Initialize charts
+                initializeCharts();
+            } catch (error) {
+                console.error('Dashboard error:', error);
+            }
+        }
+
+        async function loadUserStats() {
+            const data = await apiRequest(withParams('/users/stats'));
+            userStatsData = data;
+            document.getElementById('totalUsers').textContent = data.total_users;
+            
+            // Update trend
+            const trendText = document.getElementById('userTrendText');
+            const trendIcon = document.getElementById('userTrendIcon');
+            const trendContainer = document.getElementById('userTrendContainer');
+            
+            const growthPercentage = data.growth_percentage || 0;
+            trendText.textContent = `${Math.abs(growthPercentage)}% from last month`;
+            
+            if (growthPercentage >= 0) {
+                trendIcon.textContent = 'arrow_upward';
+                trendContainer.className = 'stat-trend up';
+            } else {
+                trendIcon.textContent = 'arrow_downward';
+                trendContainer.className = 'stat-trend down';
+            }
+        }
+
+        async function loadAssessmentStats() {
+            const data = await apiRequest(withParams('/assessments/stats'));
+            assessmentStatsData = data;
+            document.getElementById('highRiskCases').textContent = data.high_risk;
+            document.getElementById('assessmentsToday').textContent = data.assessments_today;
+            
+            // Update High Risk Trend
+            const riskText = document.getElementById('riskTrendText');
+            const riskIcon = document.getElementById('riskTrendIcon');
+            const riskContainer = document.getElementById('riskTrendContainer');
+            
+            const highRiskGrowth = data.high_risk_growth || 0;
+            riskText.textContent = `${Math.abs(highRiskGrowth)}% increase`;
+            
+            if (highRiskGrowth >= 0) {
+                riskIcon.textContent = 'arrow_upward';
+                riskContainer.className = 'stat-trend up';
+            } else {
+                riskIcon.textContent = 'arrow_downward';
+                riskContainer.className = 'stat-trend down';
+            }
+
+            // Update Assessments Today Trend
+            const assessText = document.getElementById('assessmentTrendText');
+            assessText.textContent = `${data.assessments_today} new today`;
+            
+            statsData = data.risk_distribution;
+            assessmentsData = data.assessments_per_day;
+        }
+
+        async function loadMLMetrics() {
+            const data = await apiRequest('/ml/metrics');
+            const accuracy = (data.metrics.accuracy * 100).toFixed(2);
+            document.getElementById('mlAccuracy').textContent = accuracy + '%';
+        }
+
+        async function loadRecentUsers() {
+            const data = await apiRequest(withParams('/users/recent', { limit: 5 }));
+            const tbody = document.getElementById('recentUsersBody');
+            
+            if (!data.users || data.users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.users.map(user => `
+                <tr>
+                    <td>${user.id || 'N/A'}</td>
+                    <td>${user.full_name || 'N/A'}</td>
+                    <td>${user.email || 'N/A'}</td>
+                    <td><span class="status-badge ${user.status || 'active'}">${user.status || 'active'}</span></td>
+                    <td>${user.total_assessments || 0}</td>
+                    <td>${user.created_at ? formatDate(user.created_at) : 'N/A'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadRecentActivity() {
+            const data = await apiRequest(withParams('/logs/recent', { limit: 5 }));
+            const container = document.getElementById('recentActivityList');
+            
+            if (data.logs.length === 0) {
+                container.innerHTML = '<p class="text-center text-muted">No recent activity</p>';
+                return;
+            }
+
+            container.innerHTML = data.logs.map(log => `
+                <div style="padding: 12px; border-left: 3px solid #1E88E5; margin-bottom: 12px; background: #F8F9FA; border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <strong>${log.admin_name}</strong>
+                        <span style="color: #6C757D; font-size: 12px;">${timeAgo(log.created_at)}</span>
+                    </div>
+                    <div style="color: #495057; font-size: 14px;">${log.action}: ${log.details}</div>
+                </div>
+            `).join('');
+        }
+
+        function initializeCharts() {
+            initRiskPieChart('riskPieChart', statsData);
+            initAssessmentsLineChart('assessmentsLineChart', assessmentsData);
+        }
+
+        // RBAC Analytics Functions
+        let actionTypesChartInstance = null;
+        let activityChartInstance = null;
+
+        async function loadRBACAnalytics() {
+            try {
+                const response = await fetch('/api/approvals/analytics', {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    console.error('Failed to load RBAC analytics');
+                    return;
+                }
+
+                const data = await response.json();
+                
+                // Show the widget only if user has access to approvals
+                if (data.status_breakdown || data.action_breakdown) {
+                    document.getElementById('rbacAnalyticsCard').style.display = 'block';
+                }
+
+                // Update stat boxes
+                const statusBreakdown = data.status_breakdown || {};
+                const totalPending = (statusBreakdown.pending_admin || 0) + (statusBreakdown.pending_super_admin || 0);
+                const totalApproved = statusBreakdown.approved || 0;
+                const totalRejected = statusBreakdown.rejected || 0;
+                
+                document.getElementById('totalPending').textContent = totalPending;
+                document.getElementById('totalApproved').textContent = totalApproved;
+                document.getElementById('totalRejected').textContent = totalRejected;
+                
+                const avgTime = data.avg_approval_time_hours || 0;
+                document.getElementById('avgApprovalTime').textContent = avgTime > 0 ? `${avgTime.toFixed(1)}h` : 'N/A';
+
+                // Action Types Pie Chart
+                if (data.action_breakdown && Object.keys(data.action_breakdown).length > 0) {
+                    const actionLabels = Object.keys(data.action_breakdown).map(key => {
+                        return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    });
+                    const actionData = Object.values(data.action_breakdown);
+                    
+                    const ctx = document.getElementById('actionTypesChart').getContext('2d');
+                    if (actionTypesChartInstance) actionTypesChartInstance.destroy();
+                    actionTypesChartInstance = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: actionLabels,
+                            datasets: [{
+                                data: actionData,
+                                backgroundColor: ['#1E88E5', '#43A047', '#FB8C00', '#E53935', '#8E24AA']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Recent Activity Line Chart
+                if (data.recent_activity && data.recent_activity.length > 0) {
+                    const dates = data.recent_activity.map(item => {
+                        const date = new Date(item.date);
+                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    });
+                    const approvedData = data.recent_activity.map(item => item.approved);
+                    const rejectedData = data.recent_activity.map(item => item.rejected);
+                    
+                    const ctx = document.getElementById('activityChart').getContext('2d');
+                    if (activityChartInstance) activityChartInstance.destroy();
+                    activityChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [
+                                {
+                                    label: 'Approved',
+                                    data: approvedData,
+                                    borderColor: '#43A047',
+                                    backgroundColor: 'rgba(67, 160, 71, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Rejected',
+                                    data: rejectedData,
+                                    borderColor: '#E53935',
+                                    backgroundColor: 'rgba(229, 57, 53, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading RBAC analytics:', error);
+            }
+        }
+
+        // Initialize UI and load dashboard on page load
+        initClickableStatCards();
+        loadDashboard();
+        loadRBACAnalytics();
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

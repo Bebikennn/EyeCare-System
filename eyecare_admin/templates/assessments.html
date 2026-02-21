@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assessments - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments" class="active"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left">
+                <button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button>
+            </div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="page-header">
+                <h1>Assessment Management</h1>
+                <p>View and manage all user risk assessments</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Assessments</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <select id="riskFilter" class="form-control" style="width: 150px;">
+                            <option value="">All Risks</option>
+                            <option value="low">Low Risk</option>
+                            <option value="moderate">Moderate Risk</option>
+                            <option value="high">High Risk</option>
+                        </select>
+                        <button class="btn btn-success" onclick="exportAssessments()"><i class="material-icons">download</i> Export CSV</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>User</th>
+                                    <th>Risk Level</th>
+                                    <th>Risk Score</th>
+                                    <th>Predicted Disease</th>
+                                    <th>Confidence</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assessmentsBody">
+                                <tr><td colspan="8" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assessment Detail Modal -->
+    <div id="detailModal" class="modal-overlay" style="display: none;">
+        <div class="modal" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Assessment Details</h2>
+                <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="assessmentDetails">
+                <p>Loading...</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('detailModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentPage = 1;
+        let fixedStartDate = '';
+        let fixedEndDate = '';
+
+        function initFiltersFromQueryString() {
+            const qs = new URLSearchParams(window.location.search);
+
+            const riskLevel = (qs.get('risk_level') || '').trim().toLowerCase();
+            if (riskLevel) {
+                const riskFilter = document.getElementById('riskFilter');
+                if (riskFilter) riskFilter.value = riskLevel;
+            }
+
+            const startDate = (qs.get('start_date') || '').trim();
+            const endDate = (qs.get('end_date') || '').trim();
+            const days = (qs.get('days') || '').trim();
+
+            if (startDate || endDate) {
+                fixedStartDate = startDate;
+                fixedEndDate = endDate;
+                return;
+            }
+
+            const parsedDays = parseInt(days, 10);
+            if (!Number.isNaN(parsedDays) && parsedDays > 0) {
+                const end = new Date();
+                const start = new Date(end);
+                start.setDate(end.getDate() - (parsedDays - 1));
+                fixedStartDate = start.toISOString().split('T')[0];
+                fixedEndDate = end.toISOString().split('T')[0];
+            }
+        }
+
+        async function loadAssessments(page = 1) {
+            const risk = document.getElementById('riskFilter').value;
+            const params = new URLSearchParams({ page, per_page: 10, risk_level: risk });
+
+            if (fixedStartDate) params.set('start_date', fixedStartDate);
+            if (fixedEndDate) params.set('end_date', fixedEndDate);
+
+            const data = await apiRequest(`/assessments/?${params}`);
+            
+            const pagination = data.pagination || {};
+            currentPage = pagination.page || 1;
+            renderTable(data.assessments || []);
+            renderPagination('paginationContainer', pagination.page || 1, pagination.pages || 1, 'loadAssessments');
+        }
+
+        function renderTable(assessments) {
+            const tbody = document.getElementById('assessmentsBody');
+            if (assessments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No assessments found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = assessments.map(a => `
+                <tr>
+                    <td>${a.id || 'N/A'}</td>
+                    <td>${a.user_name || 'N/A'}</td>
+                    <td><span class="risk-badge ${a.risk_level}">${a.risk_level.toUpperCase()}</span></td>
+                    <td>${parseFloat(a.risk_score).toFixed(2)}%</td>
+                    <td>${a.predicted_disease || 'N/A'}</td>
+                    <td>${(parseFloat(a.confidence || 0) * 100).toFixed(2)}%</td>
+                    <td>${a.created_at ? formatDate(a.created_at) : 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="viewDetails('${a.id}')">
+                            <i class="material-icons" style="font-size: 16px;">visibility</i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function viewDetails(id) {
+            const data = await apiRequest(`/assessments/${id}`);
+            const a = data.assessment;
+            
+            document.getElementById('assessmentDetails').innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                    <div><strong>User:</strong> ${a.user_name}</div>
+                    <div><strong>Age:</strong> ${a.age}</div>
+                    <div><strong>BMI:</strong> ${a.bmi}</div>
+                    <div><strong>Blood Pressure:</strong> ${a.blood_pressure}</div>
+                    <div><strong>Blood Sugar:</strong> ${a.blood_sugar}</div>
+                    <div><strong>Screen Time:</strong> ${a.screen_time}h</div>
+                    <div><strong>Sleep Hours:</strong> ${a.sleep_hours}h</div>
+                    <div><strong>Exercise:</strong> ${a.exercise_frequency} days/week</div>
+                    <div><strong>Smoking:</strong> ${a.smoking ? 'Yes' : 'No'}</div>
+                    <div><strong>Alcohol:</strong> ${a.alcohol ? 'Yes' : 'No'}</div>
+                    <div><strong>Blurred Vision:</strong> ${a.blurred_vision ? 'Yes' : 'No'}</div>
+                    <div><strong>Eye Pain:</strong> ${a.eye_pain ? 'Yes' : 'No'}</div>
+                </div>
+                <hr style="margin: 20px 0;">
+                <div><strong>Risk Level:</strong> <span class="risk-badge ${a.risk_level}">${a.risk_level}</span></div>
+                <div><strong>Risk Score:</strong> ${(a.risk_score * 100).toFixed(2)}%</div>
+                <div><strong>Predicted Disease:</strong> ${a.predicted_disease}</div>
+                <div><strong>Confidence:</strong> ${(a.confidence * 100).toFixed(2)}%</div>
+                <div><strong>Model:</strong> ${a.model_version}</div>
+            `;
+            openModal('detailModal');
+        }
+
+        async function exportAssessments() {
+            window.location.href = '/api/assessments/export?format=csv';
+        }
+
+        initFiltersFromQueryString();
+        document.getElementById('riskFilter').addEventListener('change', () => loadAssessments(1));
+        checkSession().then(() => loadAssessments());
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

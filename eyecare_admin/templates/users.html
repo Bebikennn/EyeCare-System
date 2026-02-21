@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>EyeCare</h2>
+            <p>Admin Dashboard</p>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users" class="active"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left">
+                <button class="menu-toggle" onclick="toggleSidebar()">
+                    <i class="material-icons">menu</i>
+                </button>
+                <div class="search-box">
+                    <i class="material-icons">search</i>
+                    <input type="text" id="searchInput" placeholder="Search users...">
+                </div>
+            </div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="page-header">
+                <h1>User Management</h1>
+                <p>Manage and monitor all registered users</p>
+            </div>
+
+            <!-- Advanced Search Panel -->
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="card-header" style="cursor: pointer;" onclick="toggleAdvancedSearch()">
+                    <h3 style="display: flex; align-items: center; gap: 8px;">
+                        <i class="material-icons" id="advancedSearchIcon">expand_more</i>
+                        Advanced Search
+                    </h3>
+                    <span class="text-muted" style="font-size: 14px;">Click to expand filters</span>
+                </div>
+                <div id="advancedSearchPanel" class="card-body" style="display: none;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">Email contains</label>
+                            <input type="text" id="filterEmail" class="form-control" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Phone contains</label>
+                            <input type="text" id="filterPhone" class="form-control" placeholder="+1234567890">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Min Assessments</label>
+                            <input type="number" id="filterMinAssessments" class="form-control" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max Assessments</label>
+                            <input type="number" id="filterMaxAssessments" class="form-control" min="0" placeholder="100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Joined After</label>
+                            <input type="date" id="filterJoinedAfter" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Joined Before</label>
+                            <input type="date" id="filterJoinedBefore" class="form-control">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 16px;">
+                        <button class="btn btn-primary" onclick="applyAdvancedFilters()">
+                            <i class="material-icons">search</i> Apply Filters
+                        </button>
+                        <button class="btn btn-outline" onclick="clearAdvancedFilters()">
+                            <i class="material-icons">clear</i> Clear All
+                        </button>
+                        <span id="activeFiltersCount" style="margin-left: auto; align-self: center; color: #1E88E5; font-weight: 500;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Users Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>User List</h3>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <select id="statusFilter" class="form-control" style="width: 160px;">
+                            <option value="">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                        
+                        <!-- Bulk Actions -->
+                        <div id="bulkActionsContainer" style="display: none; gap: 8px; align-items: center;">
+                            <span id="selectedCount" style="font-weight: 500; color: #1E88E5;"></span>
+                            <button class="btn btn-sm btn-success" onclick="bulkActivate()" title="Activate selected users">
+                                <i class="material-icons" style="font-size: 16px;">check_circle</i> Activate
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="bulkBlock()" title="Block selected users">
+                                <i class="material-icons" style="font-size: 16px;">block</i> Block
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="bulkArchive()" title="Archive selected users">
+                                <i class="material-icons" style="font-size: 16px;">delete</i> Archive
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="bulkExportCSV()" title="Export selected users to CSV">
+                                <i class="material-icons" style="font-size: 16px;">download</i> Export CSV
+                            </button>
+                            <button class="btn btn-sm btn-outline" onclick="clearSelection()" title="Clear selection">
+                                <i class="material-icons" style="font-size: 16px;">clear</i> Clear
+                            </button>
+                        </div>
+                        
+                        <button class="btn btn-outline-secondary" onclick="exportAllToCSV()" style="margin-left: auto; margin-right: 8px;" title="Export all filtered users">
+                            <i class="material-icons">download</i> Export All
+                        </button>
+                        <button class="btn btn-primary" onclick="openAddUserModal()">
+                            <i class="material-icons">add</i> Add User
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" title="Select all users">
+                                    </th>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Status</th>
+                                    <th>Assessments</th>
+                                    <th>Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr><td colspan="9" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationContainer"></div>
+                </div>
+            </div>
+
+            <!-- Archived Users Card -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <h3>Archived Users</h3>
+                    <button class="btn btn-outline" onclick="loadArchivedUsers()">
+                        <i class="material-icons">refresh</i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Deleted At</th> <!-- We might not have deleted_at, so maybe just Joined -->
+                                    <th>Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="archivedUsersTableBody">
+                                <tr><td colspan="6" class="text-center">No archived users loaded</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="archivedPaginationContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div id="addUserModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New User</h2>
+                <button class="modal-close" onclick="closeModal('addUserModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="userId">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" id="fullName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="email" class="form-control" required>
+                        <small class="text-muted" id="emailHelp">A random password will be sent to this email.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" id="phone" class="form-control">
+                    </div>
+                    <!-- Age/Gender removed from creation as they are health records -->
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('addUserModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveUser()">Save User</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        let archivedPage = 1;
+        let selectedUsers = new Set(); // Track selected user IDs
+        let advancedFiltersActive = false;
+
+        // Advanced Search Functions
+        function toggleAdvancedSearch() {
+            const panel = document.getElementById('advancedSearchPanel');
+            const icon = document.getElementById('advancedSearchIcon');
+            
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                icon.textContent = 'expand_less';
+            } else {
+                panel.style.display = 'none';
+                icon.textContent = 'expand_more';
+            }
+        }
+
+        function applyAdvancedFilters() {
+            advancedFiltersActive = true;
+            updateActiveFiltersCount();
+            loadUsers(1);
+            showToast('Advanced filters applied', 'success');
+        }
+
+        function clearAdvancedFilters() {
+            document.getElementById('filterEmail').value = '';
+            document.getElementById('filterPhone').value = '';
+            document.getElementById('filterMinAssessments').value = '';
+            document.getElementById('filterMaxAssessments').value = '';
+            document.getElementById('filterJoinedAfter').value = '';
+            document.getElementById('filterJoinedBefore').value = '';
+            advancedFiltersActive = false;
+            updateActiveFiltersCount();
+            loadUsers(1);
+            showToast('Filters cleared', 'info');
+        }
+
+        function updateActiveFiltersCount() {
+            const filters = [
+                document.getElementById('filterEmail').value,
+                document.getElementById('filterPhone').value,
+                document.getElementById('filterMinAssessments').value,
+                document.getElementById('filterMaxAssessments').value,
+                document.getElementById('filterJoinedAfter').value,
+                document.getElementById('filterJoinedBefore').value
+            ];
+            
+            const activeCount = filters.filter(f => f).length;
+            const countElement = document.getElementById('activeFiltersCount');
+            
+            if (activeCount > 0) {
+                countElement.textContent = `${activeCount} filter${activeCount > 1 ? 's' : ''} active`;
+            } else {
+                countElement.textContent = '';
+            }
+        }
+
+        function getAdvancedSearchParams() {
+            if (!advancedFiltersActive) return {};
+            
+            const params = {};
+            
+            const email = document.getElementById('filterEmail').value;
+            if (email) params.email_contains = email;
+            
+            const phone = document.getElementById('filterPhone').value;
+            if (phone) params.phone_contains = phone;
+            
+            const minAssessments = document.getElementById('filterMinAssessments').value;
+            if (minAssessments) params.min_assessments = minAssessments;
+            
+            const maxAssessments = document.getElementById('filterMaxAssessments').value;
+            if (maxAssessments) params.max_assessments = maxAssessments;
+            
+            const joinedAfter = document.getElementById('filterJoinedAfter').value;
+            if (joinedAfter) params.joined_after = joinedAfter;
+            
+            const joinedBefore = document.getElementById('filterJoinedBefore').value;
+            if (joinedBefore) params.joined_before = joinedBefore;
+            
+            return params;
+        }
+
+        // Helper function for status tooltips
+        function getStatusTooltip(status) {
+            const tooltips = {
+                'active': 'User can log in and use the app',
+                'blocked': 'User is temporarily blocked from access',
+                'archived': 'User is archived and cannot access the system'
+            };
+            return tooltips[status] || status;
+        }
+
+        // Loading overlay functions
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        async function loadUsers(page = 1) {
+            try {
+                showLoading();
+                const search = document.getElementById('searchInput').value;
+                const status = document.getElementById('statusFilter').value;
+                
+                const params = new URLSearchParams({
+                    page: page,
+                    per_page: 10,
+                    search: search,
+                    status: status
+                });
+
+                // Add advanced search parameters
+                const advancedParams = getAdvancedSearchParams();
+                Object.keys(advancedParams).forEach(key => {
+                    params.append(key, advancedParams[key]);
+                });
+
+                const data = await apiRequest(`/users/?${params}`);
+                const pagination = data.pagination || {};
+                
+                currentPage = pagination.page || 1;
+                totalPages = pagination.pages || 1;
+                
+                renderUsersTable(data.users || []);
+                renderPagination('paginationContainer', currentPage, totalPages, 'loadUsers');
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showToast('Failed to load users. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('usersTableBody');
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center">No users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => `
+                <tr id="user-row-${user.id}">
+                    <td>
+                        <input type="checkbox" class="user-checkbox" data-user-id="${user.id}" 
+                               onchange="toggleUserSelection('${user.id}')" 
+                               ${selectedUsers.has(user.id) ? 'checked' : ''}>
+                    </td>
+                    <td><small>${user.id.substring(0, 8)}...</small></td>
+                    <td>${user.full_name}</td>
+                    <td>${user.email}</td>
+                    <td>${user.phone || 'N/A'}</td>
+                    <td><span class="status-badge ${user.status}" title="${getStatusTooltip(user.status)}">${user.status}</span></td>
+                    <td>${user.total_assessments}</td>
+                    <td>${formatDate(user.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editUser('${user.id}')" title="Edit">
+                            <i class="material-icons" style="font-size: 16px;">edit</i>
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="toggleBlockUser('${user.id}', '${user.status}')" title="${user.status === 'active' ? 'Block' : 'Unblock'}">
+                            <i class="material-icons" style="font-size: 16px;">${user.status === 'active' ? 'block' : 'check_circle'}</i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser('${user.id}')" title="Archive">
+                            <i class="material-icons" style="font-size: 16px;">delete</i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadArchivedUsers(page = 1) {
+            try {
+                showLoading();
+                const params = new URLSearchParams({
+                    page: page,
+                    per_page: 5
+                });
+
+                const data = await apiRequest(`/users/archived?${params}`);
+                const pagination = data.pagination || {};
+                archivedPage = pagination.page || 1;
+                const archivedPages = pagination.pages || 1;
+                
+                renderArchivedTable(data.users || []);
+                renderPagination('archivedPaginationContainer', archivedPage, archivedPages, 'loadArchivedUsers');
+            } catch (error) {
+                console.error('Error loading archived users:', error);
+                showToast('Failed to load archived users. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderArchivedTable(users) {
+            const tbody = document.getElementById('archivedUsersTableBody');
+            
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No archived users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td><small>${user.id.substring(0, 8)}...</small></td>
+                    <td>${user.full_name}</td>
+                    <td>${user.email}</td>
+                    <td>N/A</td>
+                    <td>${formatDate(user.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-success" onclick="restoreUser('${user.id}')" title="Restore">
+                            <i class="material-icons" style="font-size: 16px;">restore</i> Restore
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteUserPermanently('${user.id}')" title="Delete Permanently" style="margin-left: 5px;">
+                            <i class="material-icons" style="font-size: 16px;">delete_forever</i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddUserModal() {
+            document.getElementById('userId').value = '';
+            document.getElementById('userForm').reset();
+            document.getElementById('modalTitle').textContent = 'Add New User';
+            document.getElementById('emailHelp').style.display = 'block';
+            openModal('addUserModal');
+        }
+
+        async function saveUser() {
+            const userId = document.getElementById('userId').value;
+            const userData = {
+                full_name: document.getElementById('fullName').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value
+            };
+
+            try {
+                if (!isSuperAdmin()) {
+                    await apiRequest('/approvals/submit', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action_type: userId ? 'update_user' : 'create_user',
+                            target_id: userId || null,
+                            data: userData
+                        })
+                    });
+
+                    showToast('Request submitted for approval.', 'success');
+                } else {
+                    const method = userId ? 'PUT' : 'POST';
+                    const endpoint = userId ? `/users/${userId}` : '/users/';
+
+                    await apiRequest(endpoint, {
+                        method: method,
+                        body: JSON.stringify(userData)
+                    });
+
+                    showToast(userId ? 'User updated successfully!' : 'User created and email sent!', 'success');
+                    loadUsers(currentPage);
+                }
+
+                closeModal('addUserModal');
+            } catch (error) {
+                console.error('Error saving user:', error);
+                const errorMsg = error.message || 'Failed to save user. Please check your input and try again.';
+                showToast(errorMsg, 'error');
+            }
+        }
+
+        async function editUser(id) {
+            const data = await apiRequest(`/users/${id}`);
+            const user = data.user;
+            
+            document.getElementById('userId').value = user.id;
+            document.getElementById('fullName').value = user.full_name;
+            document.getElementById('email').value = user.email;
+            document.getElementById('phone').value = user.phone || '';
+            
+            document.getElementById('modalTitle').textContent = 'Edit User';
+            document.getElementById('emailHelp').style.display = 'none'; // Hide email help for edit
+            
+            openModal('addUserModal');
+        }
+
+        async function toggleBlockUser(id, currentStatus) {
+            const action = currentStatus === 'active' ? 'block' : 'unblock';
+            const confirmMsg = currentStatus === 'active' 
+                ? 'Are you sure you want to block this user? They will not be able to access the system.' 
+                : 'Are you sure you want to unblock this user? They will regain access to the system.';
+                
+            if (confirm(confirmMsg)) {
+                try {
+                    showLoading();
+                    if (!isSuperAdmin()) {
+                        await apiRequest('/approvals/submit', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action_type: action === 'block' ? 'block_user' : 'unblock_user',
+                                target_id: id,
+                                data: {}
+                            })
+                        });
+                        showToast('Request submitted for approval.', 'success');
+                    } else {
+                        await apiRequest(`/users/${id}/${action}`, { method: 'POST' });
+                        showToast(`User ${action}ed successfully!`, 'success');
+                        loadUsers(currentPage);
+                    }
+                } catch (error) {
+                    console.error('Error toggling user status:', error);
+                    showToast('Failed to update user status. Please try again.', 'error');
+                } finally {
+                    hideLoading();
+                }
+            }
+        }
+
+        async function deleteUser(id) {
+            const confirmMsg = 'Are you sure you want to archive this user?\\n\\nThe user will be moved to the archived list and can be restored later if needed.';
+            
+            if (confirm(confirmMsg)) {
+                try {
+                    showLoading();
+                    if (!isSuperAdmin()) {
+                        await apiRequest('/approvals/submit', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action_type: 'archive_user',
+                                target_id: id,
+                                data: {}
+                            })
+                        });
+                        showToast('Request submitted for approval.', 'success');
+                    } else {
+                        await apiRequest(`/users/${id}`, { method: 'DELETE' });
+                        showToast('User archived successfully!', 'success');
+                        loadUsers(currentPage);
+                        loadArchivedUsers(1);
+                    }
+                } catch (error) {
+                    console.error('Error archiving user:', error);
+                    showToast('Failed to archive user. Please try again.', 'error');
+                } finally {
+                    hideLoading();
+                }
+            }
+        }
+
+        async function restoreUser(id) {
+            const confirmMsg = 'Are you sure you want to restore this user?\\n\\nThe user will be reactivated and moved back to the active users list.';
+            
+            if (confirm(confirmMsg)) {
+                try {
+                    showLoading();
+                    if (!isSuperAdmin()) {
+                        await apiRequest('/approvals/submit', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action_type: 'restore_user',
+                                target_id: id,
+                                data: {}
+                            })
+                        });
+                        showToast('Request submitted for approval.', 'success');
+                    } else {
+                        await apiRequest(`/users/${id}/restore`, { method: 'POST' });
+                        showToast('User restored successfully!', 'success');
+                        loadUsers(currentPage);
+                        loadArchivedUsers(archivedPage);
+                    }
+                } catch (error) {
+                    console.error('Error restoring user:', error);
+                    showToast('Failed to restore user. Please try again.', 'error');
+                } finally {
+                    hideLoading();
+                }
+            }
+        }
+
+        async function deleteUserPermanently(id) {
+            const confirmMsg1 = 'WARNING: You are about to PERMANENTLY delete this user!\\n\\n' +
+                               'This action will:\\n' +
+                               '• Erase ALL user data\\n' +
+                               '• Delete ALL health records\\n' +
+                               '• Remove ALL assessments\\n' +
+                               '• CANNOT be undone\\n\\n' +
+                               'Are you absolutely sure?';
+                               
+            if (!confirm(confirmMsg1)) {
+                return;
+            }
+            
+            const confirmMsg2 = 'FINAL CONFIRMATION\\n\\nType YES in the next prompt to confirm permanent deletion.';
+            alert(confirmMsg2);
+            
+            const userInput = prompt('Type YES to permanently delete this user:');
+            if (userInput !== 'YES') {
+                showToast('Deletion cancelled', 'info');
+                return;
+            }
+
+            try {
+                showLoading();
+                if (!isSuperAdmin()) {
+                    await apiRequest('/approvals/submit', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action_type: 'delete_user_permanent',
+                            target_id: id,
+                            data: {}
+                        })
+                    });
+                    showToast('Request submitted for approval.', 'success');
+                } else {
+                    await apiRequest(`/users/${id}/permanent`, {
+                        method: 'DELETE'
+                    });
+                    showToast('User permanently deleted', 'success');
+                    loadArchivedUsers(archivedPage);
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                const errorMsg = error.message || 'Failed to delete user. Please try again.';
+                showToast(errorMsg, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        document.getElementById('searchInput').addEventListener('input', debounce(() => {
+            loadUsers(1);
+        }, 300));
+
+        document.getElementById('statusFilter').addEventListener('change', () => {
+            loadUsers(1);
+        });
+
+        // Bulk Operations Functions
+        function toggleUserSelection(userId) {
+            if (selectedUsers.has(userId)) {
+                selectedUsers.delete(userId);
+            } else {
+                selectedUsers.add(userId);
+            }
+            updateBulkActionsUI();
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.user-checkbox');
+            
+            if (selectAllCheckbox.checked) {
+                checkboxes.forEach(checkbox => {
+                    const userId = checkbox.getAttribute('data-user-id');
+                    selectedUsers.add(userId);
+                    checkbox.checked = true;
+                });
+            } else {
+                selectedUsers.clear();
+                checkboxes.forEach(checkbox => checkbox.checked = false);
+            }
+            updateBulkActionsUI();
+        }
+
+        function clearSelection() {
+            selectedUsers.clear();
+            document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateBulkActionsUI();
+        }
+
+        function updateBulkActionsUI() {
+            const bulkContainer = document.getElementById('bulkActionsContainer');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            if (selectedUsers.size > 0) {
+                bulkContainer.style.display = 'flex';
+                selectedCount.textContent = `${selectedUsers.size} selected`;
+            } else {
+                bulkContainer.style.display = 'none';
+            }
+            
+            // Update select all checkbox state
+            const checkboxes = document.querySelectorAll('.user-checkbox');
+            const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+            document.getElementById('selectAllCheckbox').checked = allChecked;
+        }
+
+        async function bulkActivate() {
+            if (selectedUsers.size === 0) return;
+            
+            const confirmMsg = `Are you sure you want to activate ${selectedUsers.size} user(s)?\\n\\nThey will be able to access the system.`;
+            if (!confirm(confirmMsg)) return;
+            
+            try {
+                showLoading();
+                const userIds = Array.from(selectedUsers);
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const userId of userIds) {
+                    try {
+                        await apiRequest(`/users/${userId}/unblock`, { method: 'POST' });
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Failed to activate user ${userId}:`, error);
+                        failCount++;
+                    }
+                }
+                
+                showToast(`Successfully activated ${successCount} user(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}`, 'success');
+                clearSelection();
+                loadUsers(currentPage);
+            } catch (error) {
+                showToast('Bulk activation failed. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function bulkBlock() {
+            if (selectedUsers.size === 0) return;
+            
+            const confirmMsg = `Are you sure you want to block ${selectedUsers.size} user(s)?\\n\\nThey will not be able to access the system.`;
+            if (!confirm(confirmMsg)) return;
+            
+            try {
+                showLoading();
+                const userIds = Array.from(selectedUsers);
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const userId of userIds) {
+                    try {
+                        await apiRequest(`/users/${userId}/block`, { method: 'POST' });
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Failed to block user ${userId}:`, error);
+                        failCount++;
+                    }
+                }
+                
+                showToast(`Successfully blocked ${successCount} user(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}`, 'success');
+                clearSelection();
+                loadUsers(currentPage);
+            } catch (error) {
+                showToast('Bulk block failed. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function bulkArchive() {
+            if (selectedUsers.size === 0) return;
+            
+            const confirmMsg = `Are you sure you want to archive ${selectedUsers.size} user(s)?\\n\\nThey will be moved to the archived list and can be restored later.`;
+            if (!confirm(confirmMsg)) return;
+            
+            try {
+                showLoading();
+                const userIds = Array.from(selectedUsers);
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const userId of userIds) {
+                    try {
+                        await apiRequest(`/users/${userId}`, { method: 'DELETE' });
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Failed to archive user ${userId}:`, error);
+                        failCount++;
+                    }
+                }
+                
+                showToast(`Successfully archived ${successCount} user(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}`, 'success');
+                clearSelection();
+                loadUsers(currentPage);
+                loadArchivedUsers(1);
+            } catch (error) {
+                showToast('Bulk archive failed. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function bulkExportCSV() {
+            if (selectedUsers.size === 0) {
+                showToast('Please select users to export', 'warning');
+                return;
+            }
+            
+            try {
+                showLoading();
+                const userIds = Array.from(selectedUsers);
+                
+                // Fetch detailed user data
+                const usersData = [];
+                for (const userId of userIds) {
+                    try {
+                        const user = await apiRequest(`/users/${userId}`);
+                        usersData.push(user);
+                    } catch (error) {
+                        console.error(`Failed to fetch user ${userId}:`, error);
+                    }
+                }
+                
+                if (usersData.length === 0) {
+                    showToast('No user data to export', 'warning');
+                    return;
+                }
+                
+                // Create CSV content
+                const headers = ['ID', 'Full Name', 'Email', 'Phone', 'Status', 'Assessments', 'Risk Score', 'Joined Date'];
+                const csvRows = [headers.join(',')];
+                
+                usersData.forEach(user => {
+                    const row = [
+                        user.id || '',
+                        `"${(user.full_name || '').replace(/"/g, '""')}"`,
+                        user.email || '',
+                        user.phone || '',
+                        user.status || '',
+                        user.assessment_count || 0,
+                        user.risk_score || 'N/A',
+                        user.created_at ? new Date(user.created_at).toLocaleDateString() : ''
+                    ];
+                    csvRows.push(row.join(','));
+                });
+                
+                // Create and download CSV file
+                const csvContent = csvRows.join('\\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                link.setAttribute('href', url);
+                link.setAttribute('download', `users_export_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showToast(`Successfully exported ${usersData.length} user(s)`, 'success');
+            } catch (error) {
+                console.error('Export failed:', error);
+                showToast('Failed to export users. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function exportAllToCSV() {
+            const searchTerm = document.getElementById('searchInput').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            const advancedFilters = isAdvancedSearchActive ? getAdvancedSearchParams() : {};
+            
+            const hasFilters = searchTerm || statusFilter || Object.keys(advancedFilters).length > 0;
+            const filterDesc = hasFilters ? ' (filtered results)' : ' (all users)';
+            
+            if (!confirm(`Export all users${filterDesc}?\\n\\nThis will download a CSV file with all matching users.`)) {
+                return;
+            }
+            
+            try {
+                showLoading();
+                
+                // Fetch all users with current filters (without pagination)
+                const queryParams = new URLSearchParams({
+                    per_page: 10000, // Large number to get all
+                    search: searchTerm,
+                    status: statusFilter,
+                    ...advancedFilters
+                });
+                
+                const response = await apiRequest(`/users?${queryParams.toString()}`);
+                const users = response.users || [];
+                
+                if (users.length === 0) {
+                    showToast('No users to export', 'warning');
+                    return;
+                }
+                
+                // Create CSV content
+                const headers = ['ID', 'Full Name', 'Email', 'Phone', 'Status', 'Assessments', 'Risk Score', 'Joined Date'];
+                const csvRows = [headers.join(',')];
+                
+                users.forEach(user => {
+                    const row = [
+                        user.id || '',
+                        `"${(user.full_name || '').replace(/"/g, '""')}"`,
+                        user.email || '',
+                        user.phone || '',
+                        user.status || '',
+                        user.assessment_count || 0,
+                        user.risk_score || 'N/A',
+                        user.created_at ? new Date(user.created_at).toLocaleDateString() : ''
+                    ];
+                    csvRows.push(row.join(','));
+                });
+                
+                // Create and download CSV file
+                const csvContent = csvRows.join('\\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                const filename = hasFilters ? 
+                    `users_filtered_${new Date().toISOString().split('T')[0]}.csv` : 
+                    `all_users_${new Date().toISOString().split('T')[0]}.csv`;
+                
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showToast(`Successfully exported ${users.length} user(s)`, 'success');
+            } catch (error) {
+                console.error('Export all failed:', error);
+                showToast('Failed to export users. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        checkSession().then(() => {
+            loadUsers();
+            loadArchivedUsers();
+        });
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

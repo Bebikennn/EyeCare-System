@@ -1,0 +1,48 @@
+@startuml
+' App3 (Mobile + Backend) - Use Case Diagram
+' Generated: 2026-02-06
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor "Patient/User" as User
+actor "Email Service" as Email
+
+rectangle "App3: EyeCare Mobile + Backend" {
+  (Register Account) as UC_Register
+  (Login) as UC_Login
+  (Logout) as UC_Logout
+  (Reset Password) as UC_ResetPwd
+  (Manage Profile) as UC_Profile
+
+  (Submit Assessment) as UC_Assessment
+  (Get Risk Prediction
+  (Stage 1: ML Risk)) as UC_Predict
+  (Infer Probable Condition
+  (Stage 2: Rules; only if HIGH)) as UC_Rules
+  (View Results) as UC_ViewResults
+
+  (View Health Tips) as UC_Tips
+  (Receive Notifications) as UC_Notify
+  (Submit Feedback) as UC_Feedback
+}
+
+User --> UC_Register
+User --> UC_Login
+User --> UC_Profile
+User --> UC_Assessment
+User --> UC_ViewResults
+User --> UC_Tips
+User --> UC_Notify
+User --> UC_Feedback
+User --> UC_Logout
+
+UC_Assessment --> UC_Predict : <<include>>
+UC_Predict ..> UC_Rules : <<extend>>
+UC_ViewResults ..> UC_Predict : <<include>>
+
+Email <-- UC_ResetPwd
+Email <-- UC_Notify
+
+@enduml

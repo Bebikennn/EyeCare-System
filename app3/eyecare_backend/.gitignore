@@ -1,0 +1,115 @@
+# ===========================================
+# Python
+# ===========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===========================================
+# Virtual Environment
+# ===========================================
+.venv/
+venv/
+ENV/
+env/
+
+# ===========================================
+# Environment Variables
+# ===========================================
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+!.env.*.template
+
+# ===========================================
+# IDE
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===========================================
+# Logs
+# ===========================================
+logs/
+*.log
+gunicorn.pid
+
+# ===========================================
+# Testing
+# ===========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ===========================================
+# Database
+# ===========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ===========================================
+# Keys / Certificates / Credentials
+# ===========================================
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+local.properties
+client_secret*.json
+credentials*.json
+serviceAccount*.json
+firebase-adminsdk-*.json
+
+# ===========================================
+# Temporary Files
+# ===========================================
+*.tmp
+*.bak
+*.backup
+temp/
+tmp/
+
+# ===========================================
+# OS Files
+# ===========================================
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ===========================================
+# ML Models (if large, store externally)
+# ===========================================
+# models/*.pkl  # Uncomment if models are too large for git

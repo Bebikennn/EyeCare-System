@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs" class="active"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">            <!-- Permission Warning -->
+            <div id="permissionWarning" class="permission-warning" style="display: none;">
+                <div class="warning-icon"><i class="material-icons">warning</i></div>
+                <div class="warning-content">
+                    <h3>Access Restricted</h3>
+                    <p>Activity logs are only accessible to <strong>Admin</strong> and <strong>Super Admin</strong> roles. You are currently logged in as <span id="currentRoleDisplay"></span>.</p>
+                    <p>Contact your administrator if you need access to system logs.</p>
+                </div>
+            </div>
+            <div class="page-header">
+                <h1>Activity Logs</h1>
+                <p>Monitor system activities and admin actions</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>System Logs</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <select id="entityFilter" class="form-control" style="width: 150px;">
+                            <option value="">All Types</option>
+                            <option value="user">User</option>
+                            <option value="assessment">Assessment</option>
+                            <option value="admin">Admin</option>
+                            <option value="healthtip">Health Tip</option>
+                            <option value="ml">ML Model</option>
+                        </select>
+                        <button class="btn btn-success" onclick="exportLogs()"><i class="material-icons">download</i> Export CSV</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>ID</th><th>Admin</th><th>Action</th><th>Entity Type</th><th>Details</th><th>IP Address</th><th>Timestamp</th></tr>
+                            </thead>
+                            <tbody id="logsBody"><tr><td colspan="7" class="text-center">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div id="paginationContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentPage = 1;
+
+        async function loadLogs(page = 1) {
+            const entityType = document.getElementById('entityFilter').value;
+            const params = new URLSearchParams({ page, per_page: 20, entity_type: entityType });
+            const data = await apiRequest(`/logs/?${params}`);
+            
+            currentPage = data.page;
+            
+            const tbody = document.getElementById('logsBody');
+            if (data.logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No logs found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.logs.map(log => `
+                <tr>
+                    <td>${log.id}</td>
+                    <td>${log.admin_name}</td>
+                    <td><strong>${log.action}</strong></td>
+                    <td><span class="status-badge">${log.entity_type || 'N/A'}</span></td>
+                    <td>${log.details}</td>
+                    <td>${log.ip_address}</td>
+                    <td>${formatDateTime(log.created_at)}</td>
+                </tr>
+            `).join('');
+
+            renderPagination('paginationContainer', data.page, data.pages, 'loadLogs');
+        }
+
+        async function exportLogs() {
+            window.location.href = '/api/logs/export';
+        }
+
+        function checkPagePermissions() {
+            const userRole = sessionStorage.getItem('role');
+            const allowedRoles = ['admin', 'super_admin'];
+            
+            // Only show warning if role is loaded and NOT in allowed list
+            if (userRole && !allowedRoles.includes(userRole)) {
+                document.getElementById('permissionWarning').style.display = 'flex';
+                document.getElementById('currentRoleDisplay').textContent = formatRole(userRole);
+                
+                // Optionally hide sensitive log data
+                const logTable = document.getElementById('logsTableBody');
+                if (logTable) {
+                    logTable.innerHTML = '<tr><td colspan="7" class="text-center" style="color: #6C757D;">You do not have permission to view activity logs</td></tr>';
+                }
+            }
+        }
+
+        function formatRole(role) {
+            const roleMap = {
+                'staff': 'Staff',
+                'data_analyst': 'Data Analyst',
+                'admin': 'Admin',
+                'super_admin': 'Super Admin'
+            };
+            return roleMap[role] || role;
+        }
+
+        document.getElementById('entityFilter').addEventListener('change', () => loadLogs(1));
+        checkSession().then(() => {
+            checkPagePermissions();
+            loadLogs();
+        });
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Accounts - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin" class="active"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <!-- Permission Warning -->
+            <div id="permissionWarning" class="permission-warning" style="display: none;">
+                <div class="warning-icon"><i class="material-icons">warning</i></div>
+                <div class="warning-content">
+                    <h3>Access Restricted</h3>
+                    <p>This page is only accessible to <strong>Admin</strong> and <strong>Super Admin</strong> roles. You are currently logged in as <span id="currentRoleDisplay"></span>.</p>
+                    <p>Contact your administrator if you need elevated permissions.</p>
+                </div>
+            </div>
+
+            <div class="page-header">
+                <h1>Admin Accounts & Roles</h1>
+                <p>Manage administrator accounts and permissions</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Admin Accounts</h3>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <select id="statusFilter" class="form-control" style="width: 180px;">
+                            <option value="">Active</option>
+                            <option value="archived">Archived</option>
+                            <option value="all">All</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="openAddModal()"><i class="material-icons">add</i> Add Admin</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>ID</th><th>Username</th><th>Full Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="adminsBody"><tr><td colspan="8" class="text-center">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header"><h2 id="modalTitle">Add Admin</h2><button class="modal-close" onclick="closeModal('adminModal')">&times;</button></div>
+            <div class="modal-body">
+                <form id="adminForm">
+                    <input type="hidden" id="adminId">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" id="username" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" id="fullName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="email" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" id="password" class="form-control">
+                        <small>Leave blank to keep current password</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Role</label>
+                        <select id="role" class="form-control">
+                            <option value="staff">Staff</option>
+                            <option value="data_analyst">Data Analyst</option>
+                            <option value="super_admin">Super Admin</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('adminModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAdmin()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        async function loadAdmins() {
+            const status = document.getElementById('statusFilter')?.value || '';
+            const params = new URLSearchParams();
+            if (status) params.set('status', status);
+
+            const data = await apiRequest(params.toString() ? `/admin/?${params}` : '/admin/');
+            const tbody = document.getElementById('adminsBody');
+            
+            if (data.admins.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No admins found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.admins.map(admin => `
+                <tr>
+                    <td>${admin.id}</td>
+                    <td>${admin.username}</td>
+                    <td>${admin.full_name}</td>
+                    <td>${admin.email}</td>
+                    <td><span class="status-badge ${admin.role}">${admin.role.replace('_', ' ')}</span></td>
+                    <td><span class="status-badge ${admin.status}">${admin.status}</span></td>
+                    <td>${formatDateTime(admin.last_login)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editAdmin(${admin.id})"><i class="material-icons" style="font-size: 16px;">edit</i></button>
+                        ${admin.status === 'archived'
+                            ? `<button class="btn btn-sm btn-success" onclick="restoreAdmin(${admin.id})" title="Restore">
+                                    <i class="material-icons" style="font-size: 16px;">unarchive</i>
+                               </button>`
+                            : `<button class="btn btn-sm btn-danger" onclick="archiveAdmin(${admin.id})" title="Archive">
+                                    <i class="material-icons" style="font-size: 16px;">archive</i>
+                               </button>`
+                        }
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddModal() {
+            document.getElementById('adminForm').reset();
+            document.getElementById('adminId').value = '';
+            document.getElementById('modalTitle').textContent = 'Add Admin';
+            openModal('adminModal');
+        }
+
+        async function editAdmin(id) {
+            const data = await apiRequest(`/admin/${id}`);
+            const admin = data.admin;
+            
+            document.getElementById('adminId').value = admin.id;
+            document.getElementById('username').value = admin.username;
+            document.getElementById('fullName').value = admin.full_name;
+            document.getElementById('email').value = admin.email;
+            document.getElementById('role').value = admin.role;
+            document.getElementById('password').value = '';
+            document.getElementById('modalTitle').textContent = 'Edit Admin';
+            openModal('adminModal');
+        }
+
+        async function saveAdmin() {
+            const adminId = document.getElementById('adminId').value;
+            const password = document.getElementById('password').value;
+            
+            const adminData = {
+                username: document.getElementById('username').value,
+                full_name: document.getElementById('fullName').value,
+                email: document.getElementById('email').value,
+                role: document.getElementById('role').value
+            };
+
+            if (!adminId || password) {
+                adminData.password = password;
+            }
+
+            if (!isSuperAdmin()) {
+                await apiRequest('/approvals/submit', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action_type: adminId ? 'update_admin' : 'create_admin',
+                        target_id: adminId || null,
+                        data: adminData
+                    })
+                });
+                showAlert('Request submitted for approval.', 'success');
+                closeModal('adminModal');
+                return;
+            }
+
+            const method = adminId ? 'PUT' : 'POST';
+            const endpoint = adminId ? `/admin/${adminId}` : '/admin/';
+
+            await apiRequest(endpoint, { method, body: JSON.stringify(adminData) });
+            showAlert('Admin saved successfully!', 'success');
+            closeModal('adminModal');
+            loadAdmins();
+        }
+
+        async function archiveAdmin(id) {
+            if (confirm('Archive this admin account?')) {
+                if (!isSuperAdmin()) {
+                    await apiRequest('/approvals/submit', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action_type: 'delete_admin',
+                            target_id: id,
+                            data: {}
+                        })
+                    });
+                    showAlert('Request submitted for approval.', 'success');
+                    return;
+                }
+
+                await apiRequest(`/admin/${id}`, { method: 'DELETE' });
+                showAlert('Admin archived!', 'success');
+                loadAdmins();
+            }
+        }
+
+        async function restoreAdmin(id) {
+            if (!isSuperAdmin()) {
+                showAlert('Only Super Admin can restore admin accounts.', 'error');
+                return;
+            }
+
+            if (confirm('Restore this admin account?')) {
+                await apiRequest(`/admin/${id}/restore`, { method: 'POST' });
+                showAlert('Admin restored!', 'success');
+                loadAdmins();
+            }
+        }
+
+        checkSession().then((admin) => {
+            checkPagePermissions();
+            loadAdmins();
+        });
+
+        document.getElementById('statusFilter').addEventListener('change', () => loadAdmins());
+
+        function checkPagePermissions() {
+            const userRole = sessionStorage.getItem('role');
+            const allowedRoles = ['admin', 'super_admin'];
+            
+            // Only show warning if role is loaded and NOT in allowed list
+            if (userRole && !allowedRoles.includes(userRole)) {
+                // Show warning
+                document.getElementById('permissionWarning').style.display = 'flex';
+                document.getElementById('currentRoleDisplay').textContent = formatRole(userRole);
+                
+                // Disable action buttons
+                const actionButtons = document.querySelectorAll('.btn-primary, .btn-success, .btn-danger');
+                actionButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                    btn.title = 'You do not have permission to perform this action';
+                });
+                
+                // Disable form inputs
+                const formInputs = document.querySelectorAll('input, select, textarea');
+                formInputs.forEach(input => {
+                    input.disabled = true;
+                });
+            }
+        }
+
+        function formatRole(role) {
+            const roleMap = {
+                'staff': 'Staff',
+                'data_analyst': 'Data Analyst',
+                'admin': 'Admin',
+                'super_admin': 'Super Admin'
+            };
+            return roleMap[role] || role;
+        }
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

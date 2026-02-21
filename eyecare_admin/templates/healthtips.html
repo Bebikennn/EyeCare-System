@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Tips - EyeCare Admin</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>EyeCare</h2><p>Admin Dashboard</p></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard"><i class="material-icons">dashboard</i> Dashboard</a></li>
+            <li><a href="/users"><i class="material-icons">people</i> Users</a></li>
+            <li><a href="/assessments"><i class="material-icons">assignment</i> Assessments</a></li>
+            <li><a href="/ml-analytics"><i class="material-icons">analytics</i> ML Analytics</a></li>
+            <li><a href="/healthtips" class="active"><i class="material-icons">health_and_safety</i> Health Tips</a></li>
+            <li><a href="/admin"><i class="material-icons">admin_panel_settings</i> Admin Accounts</a></li>
+            <li><a href="/approvals"><i class="material-icons">verified</i> Approvals</a></li>
+            <li style="display: none;"><a href="/my-requests"><i class="material-icons">pending_actions</i> My Requests</a></li>
+            <li><a href="/settings"><i class="material-icons">settings</i> Settings</a></li>
+            <li><a href="/logs"><i class="material-icons">history</i> Activity Logs</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="top-navbar">
+            <div class="navbar-left"><button class="menu-toggle" onclick="toggleSidebar()"><i class="material-icons">menu</i></button></div>
+            <div class="navbar-right">
+                {% include 'partials/notification_bell.html' %}
+                {% include 'partials/user_menu.html' %}
+            </div>
+        </div>
+
+        <div class="content-area">
+            <!-- Permission Warning -->
+            <div id="permissionWarning" class="permission-warning" style="display: none;">
+                <div class="warning-icon"><i class="material-icons">info</i></div>
+                <div class="warning-content">
+                    <h3>Approval Required</h3>
+                    <p>You are logged in as <span id="currentRoleDisplay"></span>. Any changes you make to health tips will be submitted for approval.</p>
+                    <p>Track your requests on the <a href="/my-requests" style="color: #1E88E5; font-weight: 600;">My Requests</a> page.</p>
+                </div>
+            </div>
+
+            <div class="page-header">
+                <h1>Health Tips Manager</h1>
+                <p>Create and manage health tips for users</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Health Tips</h3>
+                    <button class="btn btn-primary" onclick="openAddModal()"><i class="material-icons">add</i> Add Tip</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>ID</th><th>Title</th><th>Category</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="tipsBody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div id="paginationContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tipModal" class="modal-overlay" style="display: none;">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header"><h2 id="modalTitle">Add Health Tip</h2><button class="modal-close" onclick="closeModal('tipModal')">&times;</button></div>
+            <div class="modal-body">
+                <form id="tipForm">
+                    <input type="hidden" id="tipId">
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input type="text" id="title" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select id="category" class="form-control">
+                            <option value="prevention">Prevention</option>
+                            <option value="nutrition">Nutrition</option>
+                            <option value="exercise">Exercise</option>
+                            <option value="eye_care">Eye Care</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Content</label>
+                        <textarea id="content" class="form-control" rows="6" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select id="status" class="form-control">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Image URL (optional)</label>
+                        <input type="text" id="imageUrl" class="form-control">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('tipModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveTip()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let currentPage = 1;
+
+        async function loadTips(page = 1) {
+            const data = await apiRequest(`/healthtips/?page=${page}&per_page=10`);
+            currentPage = data.page;
+            
+            const tbody = document.getElementById('tipsBody');
+            if (data.healthtips.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No health tips found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.healthtips.map(tip => `
+                <tr>
+                    <td>${tip.id}</td>
+                    <td>${tip.title}</td>
+                    <td>${tip.category}</td>
+                    <td><span class="status-badge ${tip.status}">${tip.status}</span></td>
+                    <td>${formatDate(tip.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editTip(${tip.id})"><i class="material-icons" style="font-size: 16px;">edit</i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTip(${tip.id})"><i class="material-icons" style="font-size: 16px;">delete</i></button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderPagination('paginationContainer', data.page, data.pages, 'loadTips');
+        }
+
+        function openAddModal() {
+            document.getElementById('tipForm').reset();
+            document.getElementById('tipId').value = '';
+            document.getElementById('modalTitle').textContent = 'Add Health Tip';
+            openModal('tipModal');
+        }
+
+        async function editTip(id) {
+            const data = await apiRequest(`/healthtips/${id}`);
+            const tip = data.healthtip;
+            
+            document.getElementById('tipId').value = tip.id;
+            document.getElementById('title').value = tip.title;
+            document.getElementById('category').value = tip.category;
+            document.getElementById('content').value = tip.content;
+            document.getElementById('imageUrl').value = tip.image_url || '';
+            document.getElementById('modalTitle').textContent = 'Edit Health Tip';
+            openModal('tipModal');
+        }
+
+        async function deleteTip(id) {
+            if (confirm('Delete this health tip?')) {
+                await apiRequest(`/healthtips/${id}`, { method: 'DELETE' });
+                showAlert('Health tip deleted!', 'success');
+                loadTips(currentPage);
+            }
+        }
+
+        checkSession().then(() => {
+            checkPagePermissions();
+            loadTips();
+        });
+
+        function checkPagePermissions() {
+            const userRole = sessionStorage.getItem('role');
+            const requiresApproval = ['staff', 'data_analyst', 'analyst', 'admin'];
+            
+            if (requiresApproval.includes(userRole)) {
+                // Show info banner about approval workflow
+                document.getElementById('permissionWarning').style.display = 'flex';
+                document.getElementById('currentRoleDisplay').textContent = formatRole(userRole);
+            }
+        }
+
+        function formatRole(role) {
+            const roleMap = {
+                'staff': 'Staff',
+                'data_analyst': 'Data Analyst',
+                'admin': 'Admin',
+                'super_admin': 'Super Admin'
+            };
+            return roleMap[role] || role;
+        }
+
+        function requiresApproval() {
+            const userRole = sessionStorage.getItem('role');
+            return userRole !== 'super_admin';
+        }
+
+        // Route through approval for non-super-admin
+        async function saveTip() {
+            const tipId = document.getElementById('tipId').value;
+            const tipData = {
+                title: document.getElementById('title').value,
+                category: document.getElementById('category').value,
+                content: document.getElementById('content').value,
+                status: document.getElementById('status').value
+            };
+
+            // Check if user requires approval
+            if (requiresApproval()) {
+                try {
+                    await apiRequest('/approvals/submit', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action_type: tipId ? 'update_health_tip' : 'create_health_tip',
+                            target_id: tipId || null,
+                            data: tipData
+                        })
+                    });
+                    showAlert(`Request submitted for approval. Track it on the My Requests page.`, 'success');
+                    closeModal('tipModal');
+                    // Don't reload tips as the change isn't approved yet
+                } catch (error) {
+                    showAlert(error.message || 'Failed to submit approval request', 'error');
+                }
+                return;
+            }
+
+            // Direct save for admin/super_admin
+            const method = tipId ? 'PUT' : 'POST';
+            const endpoint = tipId ? `/healthtips/${tipId}` : '/healthtips/';
+
+            try {
+                await apiRequest(endpoint, { method, body: JSON.stringify(tipData) });
+                showAlert('Health tip saved successfully!', 'success');
+                closeModal('tipModal');
+                loadTips(currentPage);
+            } catch (error) {
+                showAlert(error.message || 'Failed to save health tip', 'error');
+            }
+        }
+
+        // Route through approval for non-super-admin
+        async function deleteTip(id) {
+            if (!confirm('Delete this health tip?')) return;
+
+            // Check if user requires approval
+            if (requiresApproval()) {
+                try {
+                    await apiRequest('/approvals/submit', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action_type: 'delete_health_tip',
+                            target_id: id,
+                            data: {}
+                        })
+                    });
+                    showAlert('Request submitted for approval. Track it on the My Requests page.', 'success');
+                } catch (error) {
+                    showAlert(error.message || 'Failed to submit approval request', 'error');
+                }
+                return;
+            }
+
+            // Direct delete for admin/super_admin
+            try {
+                await apiRequest(`/healthtips/${id}`, { method: 'DELETE' });
+                showAlert('Health tip deleted!', 'success');
+                loadTips(currentPage);
+            } catch (error) {
+                showAlert(error.message || 'Failed to delete health tip', 'error');
+            }
+        }
+    </script>
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>

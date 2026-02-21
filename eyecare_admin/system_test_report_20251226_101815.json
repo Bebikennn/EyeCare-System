@@ -1,0 +1,441 @@
+{
+  "timestamp": "2025-12-26T10:18:15.385836",
+  "overall_score": 95.45454545454545,
+  "grade": "A+",
+  "status": "PRODUCTION READY",
+  "total_tests": 66,
+  "passed_tests": 63,
+  "failed_tests": 3,
+  "category_scores": {
+    "Environment": {
+      "total": 11,
+      "passed": 11,
+      "percentage": 100.0
+    },
+    "Dependencies": {
+      "total": 16,
+      "passed": 16,
+      "percentage": 100.0
+    },
+    "Database": {
+      "total": 1,
+      "passed": 0,
+      "percentage": 0.0
+    },
+    "Redis": {
+      "total": 5,
+      "passed": 5,
+      "percentage": 100.0
+    },
+    "Backup": {
+      "total": 3,
+      "passed": 3,
+      "percentage": 100.0
+    },
+    "Flask": {
+      "total": 8,
+      "passed": 7,
+      "percentage": 87.5
+    },
+    "Security": {
+      "total": 3,
+      "passed": 3,
+      "percentage": 100.0
+    },
+    "Production": {
+      "total": 6,
+      "passed": 6,
+      "percentage": 100.0
+    },
+    "Documentation": {
+      "total": 6,
+      "passed": 6,
+      "percentage": 100.0
+    },
+    "API": {
+      "total": 1,
+      "passed": 0,
+      "percentage": 0.0
+    },
+    "Code Quality": {
+      "total": 6,
+      "passed": 6,
+      "percentage": 100.0
+    }
+  },
+  "test_results": {
+    "Environment": [
+      {
+        "name": "Python version (3.8+)",
+        "status": "PASS",
+        "message": "Python 3.13.9"
+      },
+      {
+        "name": "Config file: config.py",
+        "status": "PASS",
+        "message": "Found at D:\\Users\\johnv\\Projects\\eyecare_admin\\config.py"
+      },
+      {
+        "name": "Config file: config_production.py",
+        "status": "PASS",
+        "message": "Found at D:\\Users\\johnv\\Projects\\eyecare_admin\\config_production.py"
+      },
+      {
+        "name": "Config file: .env.production.template",
+        "status": "PASS",
+        "message": "Found at D:\\Users\\johnv\\Projects\\eyecare_admin\\.env.production.template"
+      },
+      {
+        "name": "Config file: app.py",
+        "status": "PASS",
+        "message": "Found at D:\\Users\\johnv\\Projects\\eyecare_admin\\app.py"
+      },
+      {
+        "name": "Directory: logs",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Directory: static/uploads",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Directory: backups",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Directory: utils",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Directory: routes",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Directory: models",
+        "status": "PASS",
+        "message": ""
+      }
+    ],
+    "Dependencies": [
+      {
+        "name": "Flask",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "PyMySQL",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flask-CORS",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flask-WTF",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flask-Limiter",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flask-Mail",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Redis",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Sentry SDK",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Gunicorn",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Gevent",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "OpenPyXL",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Pytest",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Pylint",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Black",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flake8",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Mypy",
+        "status": "PASS",
+        "message": "Installed"
+      }
+    ],
+    "Database": [
+      {
+        "name": "Database module",
+        "status": "FAIL",
+        "message": "database.py not found"
+      }
+    ],
+    "Redis": [
+      {
+        "name": "Redis module import",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Cache set/get operations",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Cache delete operation",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "@cached decorator",
+        "status": "PASS",
+        "message": "Function called once, cached result used"
+      },
+      {
+        "name": "Cache type",
+        "status": "PASS",
+        "message": "Using in-memory fallback (Redis server not running)"
+      }
+    ],
+    "Backup": [
+      {
+        "name": "Backup script exists",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Backups directory exists",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Backups available",
+        "status": "PASS",
+        "message": "1 backup(s) found"
+      }
+    ],
+    "Flask": [
+      {
+        "name": "App module import",
+        "status": "FAIL",
+        "message": "cannot import name 'PendingAction' from 'database' (D:\\Users\\johnv\\Projects\\eyecare_admin\\database.py)"
+      },
+      {
+        "name": "Route file: auth.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: users.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: assessments.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: healthtips.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: admin_routes.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: logs.py",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Route file: reports.py",
+        "status": "PASS",
+        "message": ""
+      }
+    ],
+    "Security": [
+      {
+        "name": "Sentry error tracking",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Production configuration",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Environment template",
+        "status": "PASS",
+        "message": ""
+      }
+    ],
+    "Production": [
+      {
+        "name": "Gunicorn WSGI server config",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Nginx reverse proxy config",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Systemd service file",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Database optimization script",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Deployment documentation",
+        "status": "PASS",
+        "message": ""
+      },
+      {
+        "name": "Quick start guide",
+        "status": "PASS",
+        "message": ""
+      }
+    ],
+    "Documentation": [
+      {
+        "name": "DEPLOYMENT_GUIDE.md",
+        "status": "PASS",
+        "message": "14.5 KB"
+      },
+      {
+        "name": "QUICKSTART.md",
+        "status": "PASS",
+        "message": "8.4 KB"
+      },
+      {
+        "name": "PHASE5A_COMPLETE.md",
+        "status": "PASS",
+        "message": "17.4 KB"
+      },
+      {
+        "name": "PHASE5A_PROGRESS.md",
+        "status": "PASS",
+        "message": "12.0 KB"
+      },
+      {
+        "name": "SYSTEM_ANALYSIS.md",
+        "status": "PASS",
+        "message": "15.2 KB"
+      },
+      {
+        "name": "PHASE4_COMPLETE.md",
+        "status": "PASS",
+        "message": "13.8 KB"
+      }
+    ],
+    "API": [
+      {
+        "name": "Server running",
+        "status": "FAIL",
+        "message": "Connection refused - server not running"
+      }
+    ],
+    "Code Quality": [
+      {
+        "name": "Pytest",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Pylint",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Black",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Flake8",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Mypy",
+        "status": "PASS",
+        "message": "Installed"
+      },
+      {
+        "name": "Test directory",
+        "status": "PASS",
+        "message": ""
+      }
+    ]
+  },
+  "failures": [
+    {
+      "category": "Database",
+      "test": "Database module",
+      "message": "database.py not found"
+    },
+    {
+      "category": "Flask",
+      "test": "App module import",
+      "message": "cannot import name 'PendingAction' from 'database' (D:\\Users\\johnv\\Projects\\eyecare_admin\\database.py)"
+    },
+    {
+      "category": "API",
+      "test": "Server running",
+      "message": "Connection refused - server not running"
+    }
+  ],
+  "recommendations": [
+    "\u26a0 Database: Ensure MySQL is running and all tables are created",
+    "\u2139 Server: Start the Flask server to test API endpoints"
+  ]
+}

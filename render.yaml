@@ -1,0 +1,137 @@
+databases:
+  - name: eyecare-postgres
+    plan: free
+    databaseName: eyecare
+    user: eyecare
+
+services:
+  # -------------------------
+  # Flask Backend API (mobile + web)
+  # -------------------------
+  - type: web
+    name: eyecare-backend
+    env: python
+    plan: free
+    rootDir: app3/eyecare_backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+
+      - key: FLASK_ENV
+        value: production
+      - key: DEBUG
+        value: "False"
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eyecare-postgres
+          property: connectionString
+
+      # Security / auth (set these in Render dashboard)
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+
+      # CORS allowlist (comma-separated). Example: https://eyecare-web.onrender.com
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Rate limit storage (memory is simplest; swap to Redis if you add one)
+      - key: RATELIMIT_STORAGE_URL
+        value: memory://
+
+      # Optional monitoring
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+
+  # -------------------------
+  # Flask Admin (server-rendered)
+  # -------------------------
+  - type: web
+    name: eyecare-admin
+    env: python
+    plan: free
+    rootDir: eyecare_admin
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+
+      - key: FLASK_ENV
+        value: production
+      - key: DEBUG
+        value: "False"
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eyecare-postgres
+          property: connectionString
+
+      # Required by config_production.py
+      - key: SECRET_KEY
+        sync: false
+
+      # Enable automatic table creation on first deploy.
+      # In production, DEFAULT_ADMIN_PASSWORD must be set for a default admin user.
+      - key: AUTO_INIT_DB
+        value: "1"
+
+      # Default admin bootstrap (set in Render dashboard)
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEFAULT_ADMIN_USERNAME
+        value: admin
+      - key: DEFAULT_ADMIN_EMAIL
+        value: admin@eyecare.com
+      - key: DEFAULT_ADMIN_FULL_NAME
+        value: Super Administrator
+
+      # Cookies / URL scheme
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: PREFERRED_URL_SCHEME
+        value: https
+
+      # Admin CORS (if you need cross-origin access; otherwise can be empty)
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Avoid Redis dependency unless you add a Redis instance
+      - key: RATELIMIT_STORAGE_URL
+        value: memory://
+
+      # Optional monitoring
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+
+  # -------------------------
+  # Flutter Web (static site)
+  # -------------------------
+  - type: static
+    name: eyecare-web
+    plan: free
+    rootDir: app3
+    buildCommand: |
+      set -e
+      if [ ! -d flutter ]; then
+        git clone https://github.com/flutter/flutter.git -b stable --depth 1
+      fi
+      export PATH="$PWD/flutter/bin:$PATH"
+      flutter --version
+      flutter config --enable-web
+      flutter pub get
+      flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
+    staticPublishPath: build/web
+    envVars:
+      # Used at build time for `--dart-define`.
+      # Example: https://eyecare-backend.onrender.com
+      - key: API_BASE_URL
+        sync: false

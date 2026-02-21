@@ -1,0 +1,30 @@
+[Unit]
+Description=Gunicorn instance to serve EyeCare Admin
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/home/user/eyecare_admin
+Environment="PATH=/home/user/eyecare_admin/venv/bin"
+ExecStart=/home/user/eyecare_admin/venv/bin/gunicorn --config gunicorn_config.py app:app
+
+# Restart policy
+Restart=always
+RestartSec=3
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/user/eyecare_admin/logs
+ReadWritePaths=/home/user/eyecare_admin/static/uploads
+ReadWritePaths=/home/user/eyecare_admin/backups
+
+# Logging
+StandardOutput=append:/home/user/eyecare_admin/logs/gunicorn_stdout.log
+StandardError=append:/home/user/eyecare_admin/logs/gunicorn_stderr.log
+
+[Install]
+WantedBy=multi-user.target

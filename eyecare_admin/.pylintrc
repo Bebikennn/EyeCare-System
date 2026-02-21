@@ -1,0 +1,53 @@
+[MASTER]
+# Specify Python version
+py-version=3.10
+
+# Add files or directories to the blacklist
+ignore=.venv,venv,migrations,trashbin,build,htmlcov,static,templates,tests
+
+# Use multiple processes for faster linting
+jobs=4
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+disable=
+    C0111,  # missing-docstring
+    C0103,  # invalid-name
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    R0914,  # too-many-locals
+    W0703,  # broad-except (we catch exceptions in API routes)
+    E1101,  # no-member (false positives with SQLAlchemy)
+    R0401,  # cyclic-import
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=120
+
+# Maximum number of lines in a module
+max-module-lines=1000
+
+[DESIGN]
+# Maximum number of arguments for function/method
+max-args=10
+
+# Maximum number of locals for function/method
+max-locals=20
+
+# Maximum number of return statements
+max-returns=6
+
+# Maximum number of branch for function/method
+max-branches=15
+
+[SIMILARITIES]
+# Minimum lines number of a similarity
+min-similarity-lines=10
+
+[BASIC]
+# Good variable names
+good-names=i,j,k,id,db,app
+
+[IMPORTS]
+# Allow wildcard imports in __init__.py
+allow-wildcard-with-all=yes

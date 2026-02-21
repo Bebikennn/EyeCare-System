@@ -1,0 +1,25 @@
+[tool.black]
+line-length = 120
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | migrations
+  | trashbin
+  | build
+  | htmlcov
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+skip = [".venv", "venv", "migrations", "trashbin", "build"]
+known_first_party = ["app", "database", "config", "routes", "utils", "schemas"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
