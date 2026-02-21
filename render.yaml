@@ -1,6 +1,5 @@
 databases:
   - name: eyecare-postgres
-    plan: free
     databaseName: eyecare
     user: eyecare
 
@@ -11,7 +10,6 @@ services:
   - type: web
     name: eyecare-backend
     env: python
-    plan: free
     rootDir: app3/eyecare_backend
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
@@ -55,7 +53,6 @@ services:
   - type: web
     name: eyecare-admin
     env: python
-    plan: free
     rootDir: eyecare_admin
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
@@ -118,7 +115,6 @@ services:
   - type: web
     name: eyecare-web
     env: static
-    plan: free
     rootDir: app3
     buildCommand: |
       set -e
