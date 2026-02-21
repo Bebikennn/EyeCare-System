@@ -115,8 +115,9 @@ services:
   # -------------------------
   # Flutter Web (static site)
   # -------------------------
-  - type: static
+  - type: web
     name: eyecare-web
+    env: static
     plan: free
     rootDir: app3
     buildCommand: |
