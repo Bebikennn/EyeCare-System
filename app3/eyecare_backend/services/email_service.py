@@ -5,15 +5,68 @@ from flask_mail import Mail, Message
 import logging
 import os
 import random
+import secrets
 import string
 from datetime import datetime, timedelta
 
+import hashlib
+
 import requests
+
+from services.db import DB_DIALECT, get_connection
 
 mail = Mail()
 
-# In-memory storage for verification codes (use Redis in production)
+# In-memory fallback storage for verification codes.
+# Primary storage is the database to survive multi-worker deployments and restarts.
 verification_codes = {}
+
+
+def _normalize_email(email: str) -> str:
+    return (email or '').strip().lower()
+
+
+def _normalize_code(code) -> str:
+    return str(code or '').strip()
+
+
+def _now_utc() -> datetime:
+    return datetime.utcnow()
+
+
+def _hash_code(code: str) -> str:
+    pepper = (os.getenv('VERIFICATION_CODE_PEPPER') or os.getenv('SECRET_KEY') or '').strip()
+    raw = f"{code}:{pepper}".encode('utf-8')
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _ensure_verification_table(conn) -> None:
+    cur = conn.cursor()
+    if DB_DIALECT == 'postgres':
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_verification_codes (
+                email TEXT PRIMARY KEY,
+                code_hash TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    else:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                code_hash VARCHAR(64) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                attempts INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    conn.commit()
 
 def generate_verification_code():
     """Generate a 6-digit verification code"""
@@ -26,7 +79,7 @@ def _is_sendgrid_configured() -> bool:
     return bool(api_key and from_email)
 
 
-def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
+def _send_via_sendgrid(*, to_email: str, subject: str, html: str, plain: str) -> bool:
     api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
     from_email = (os.getenv('SENDGRID_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
 
@@ -37,7 +90,10 @@ def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
         'personalizations': [{'to': [{'email': to_email}]}],
         'from': {'email': from_email},
         'subject': subject,
-        'content': [{'type': 'text/html', 'value': html}],
+        'content': [
+            {'type': 'text/plain', 'value': plain},
+            {'type': 'text/html', 'value': html},
+        ],
     }
 
     try:
@@ -83,13 +139,20 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
         provider = (os.getenv('EMAIL_PROVIDER') or 'auto').strip().lower()
 
         subject = "EyeCare - Email Verification Code"
+        code_str = _normalize_code(code)
+        plain = (
+            "Welcome to EyeCare!\n\n"
+            f"Your verification code is: {code_str}\n\n"
+            "This code expires in 10 minutes.\n"
+            "If you didn't request this, you can ignore this email.\n"
+        )
         html = f"""
             <html>
                 <body style="font-family: Arial, sans-serif; padding: 20px;">
                     <h2 style="color: #1976d2;">Welcome to EyeCare!</h2>
                     <p>Thank you for registering with EyeCare. Please use the verification code below to complete your registration:</p>
                     <div style="background-color: #f5f5f5; padding: 20px; margin: 20px 0; text-align: center; border-radius: 8px;">
-                        <h1 style="color: #1976d2; font-size: 36px; letter-spacing: 5px; margin: 0;">{code}</h1>
+                        <h1 style="color: #1976d2; font-size: 36px; letter-spacing: 5px; margin: 0;">{code_str}</h1>
                     </div>
                     <p>This code will expire in 10 minutes.</p>
                     <p>If you didn't request this code, please ignore this email.</p>
@@ -113,12 +176,22 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
         def _send_via_smtp() -> bool:
             if not smtp_configured:
                 return False
-            msg = Message(subject=subject, recipients=[email], html=html)
+            msg = Message(
+                subject=subject,
+                recipients=[email],
+                body=(
+                    "Welcome to EyeCare!\n\n"
+                    f"Your verification code is: {code_str}\n\n"
+                    "This code expires in 10 minutes.\n"
+                    "If you didn't request this, you can ignore this email.\n"
+                ),
+                html=html,
+            )
             mail.send(msg)
             return True
 
         if provider == 'sendgrid':
-            if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html):
+            if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html, plain=plain):
                 return True
             try:
                 from flask import current_app
@@ -139,7 +212,7 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             return False
 
         # Prefer SendGrid HTTP API when configured
-        if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html):
+        if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html, plain=plain):
             return True
 
         # Only fall back to SMTP if it's actually configured.
@@ -173,38 +246,152 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
         return False
 
 def store_verification_code(email, code, expiry_minutes=10):
-    """Store verification code with expiry time"""
-    expiry_time = datetime.now() + timedelta(minutes=expiry_minutes)
-    verification_codes[email] = {
-        'code': code,
-        'expiry': expiry_time,
-        'attempts': 0
+    """Store verification code with expiry time.
+
+    Uses the database as the source of truth. Falls back to in-memory storage if DB is unavailable.
+    """
+    email_n = _normalize_email(email)
+    code_n = _normalize_code(code)
+    expiry_time = _now_utc() + timedelta(minutes=expiry_minutes)
+    code_hash = _hash_code(code_n)
+
+    conn = None
+    try:
+        conn = get_connection()
+        _ensure_verification_table(conn)
+        cur = conn.cursor()
+        if DB_DIALECT == 'postgres':
+            cur.execute(
+                """
+                INSERT INTO email_verification_codes (email, code_hash, expires_at, attempts, created_at)
+                VALUES (%s, %s, %s, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT (email)
+                DO UPDATE SET code_hash=EXCLUDED.code_hash, expires_at=EXCLUDED.expires_at, attempts=0, created_at=CURRENT_TIMESTAMP
+                """,
+                (email_n, code_hash, expiry_time),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO email_verification_codes (email, code_hash, expires_at, attempts, created_at)
+                VALUES (%s, %s, %s, 0, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash), expires_at=VALUES(expires_at), attempts=0, created_at=CURRENT_TIMESTAMP
+                """,
+                (email_n, code_hash, expiry_time),
+            )
+        conn.commit()
+        return
+    except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception('Failed to persist verification code; using in-memory fallback')
+        except Exception:
+            logging.getLogger(__name__).exception('Failed to persist verification code; using in-memory fallback')
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+    verification_codes[email_n] = {
+        'code': code_n,
+        'expiry': datetime.now() + timedelta(minutes=expiry_minutes),
+        'attempts': 0,
     }
 
 def verify_code(email, code):
-    """Verify if the code is valid and not expired"""
-    if email not in verification_codes:
-        return False, "No verification code found for this email"
-    
-    stored_data = verification_codes[email]
-    
-    # Check if code has expired
-    if datetime.now() > stored_data['expiry']:
-        del verification_codes[email]
-        return False, "Verification code has expired"
-    
-    # Check if too many attempts
-    if stored_data['attempts'] >= 5:
-        del verification_codes[email]
-        return False, "Too many failed attempts. Please request a new code"
-    
-    # Verify code
-    if stored_data['code'] == code:
-        del verification_codes[email]
-        return True, "Code verified successfully"
-    else:
-        stored_data['attempts'] += 1
+    """Verify if the code is valid and not expired."""
+    email_n = _normalize_email(email)
+    code_n = _normalize_code(code)
+
+    # Try database first (source of truth)
+    conn = None
+    try:
+        conn = get_connection()
+        _ensure_verification_table(conn)
+
+        # Opportunistic cleanup so the table doesn't grow unbounded
+        cur = conn.cursor()
+        if DB_DIALECT == 'postgres':
+            cur.execute("DELETE FROM email_verification_codes WHERE expires_at < %s", (_now_utc(),))
+        else:
+            cur.execute("DELETE FROM email_verification_codes WHERE expires_at < %s", (_now_utc(),))
+        conn.commit()
+
+        cur.execute(
+            "SELECT email, code_hash, expires_at, attempts FROM email_verification_codes WHERE email = %s",
+            (email_n,),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            return False, "No verification code found for this email"
+
+        expires_at = row.get('expires_at')
+        if getattr(expires_at, 'tzinfo', None) is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+        attempts = int(row.get('attempts') or 0)
+
+        # If expired, delete and reject
+        if expires_at is not None and _now_utc() > expires_at:
+            cur.execute("DELETE FROM email_verification_codes WHERE email = %s", (email_n,))
+            conn.commit()
+            return False, "Verification code has expired"
+
+        if attempts >= 5:
+            cur.execute("DELETE FROM email_verification_codes WHERE email = %s", (email_n,))
+            conn.commit()
+            return False, "Too many failed attempts. Please request a new code"
+
+        expected_hash = row.get('code_hash') or ''
+        provided_hash = _hash_code(code_n)
+
+        if secrets.compare_digest(expected_hash, provided_hash):
+            cur.execute("DELETE FROM email_verification_codes WHERE email = %s", (email_n,))
+            conn.commit()
+            return True, "Code verified successfully"
+
+        # Wrong code: increment attempts
+        cur.execute(
+            "UPDATE email_verification_codes SET attempts = attempts + 1 WHERE email = %s",
+            (email_n,),
+        )
+        conn.commit()
         return False, "Invalid verification code"
+    except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception('DB verify_code failed; using in-memory fallback')
+        except Exception:
+            logging.getLogger(__name__).exception('DB verify_code failed; using in-memory fallback')
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+    # Fallback: in-memory (development / DB outage)
+    if email_n not in verification_codes:
+        return False, "No verification code found for this email"
+
+    stored_data = verification_codes[email_n]
+
+    if datetime.now() > stored_data['expiry']:
+        del verification_codes[email_n]
+        return False, "Verification code has expired"
+
+    if stored_data['attempts'] >= 5:
+        del verification_codes[email_n]
+        return False, "Too many failed attempts. Please request a new code"
+
+    if stored_data['code'] == code_n:
+        del verification_codes[email_n]
+        return True, "Code verified successfully"
+
+    stored_data['attempts'] += 1
+    return False, "Invalid verification code"
 
 def cleanup_expired_codes():
     """Remove expired verification codes"""
