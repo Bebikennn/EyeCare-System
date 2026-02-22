@@ -10,6 +10,7 @@ from services.email_service import (
     store_verification_code,
     verify_code
 )
+import threading
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 from api_specs import AUTH_LOGIN_SPEC, AUTH_REGISTER_SPEC
@@ -31,7 +32,7 @@ def send_verification_code():
     if limiter:
         limiter.limit("5 per minute")(send_verification_code)
     
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
     
     if not email:
@@ -47,14 +48,33 @@ def send_verification_code():
     finally:
         conn.close()
     
-    # Generate and send verification code
+    # Generate verification code
     code = generate_verification_code()
-    
-    if send_verification_email(email, code):
-        store_verification_code(email, code)
+
+    # Store code first so the request can return fast (important for web + Render free tier)
+    store_verification_code(email, code)
+
+    # In production, send the email asynchronously to avoid blocking the request.
+    # Flask-Mail requires an application context, so we pass the app object into the thread.
+    if current_app.debug:
+        ok = send_verification_email(email, code)
+        if not ok:
+            return jsonify({"status": "error", "message": "Failed to send email. Please check your email address"}), 500
         return jsonify({"status": "success", "message": "Verification code sent to your email"}), 200
-    else:
-        return jsonify({"status": "error", "message": "Failed to send email. Please check your email address"}), 500
+
+    app_obj = current_app._get_current_object()
+
+    def _send_in_background():
+        with app_obj.app_context():
+            try:
+                ok = send_verification_email(email, code)
+                if not ok:
+                    app_obj.logger.warning("Failed to send verification email to %s", email)
+            except Exception:
+                app_obj.logger.exception("Error sending verification email")
+
+    threading.Thread(target=_send_in_background, daemon=True).start()
+    return jsonify({"status": "success", "message": "Verification code sent to your email"}), 200
 
 # -------------------------------
 # Verify Code
@@ -181,7 +201,7 @@ def login():
 # -------------------------------
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
     
     if not email:
@@ -202,18 +222,38 @@ def forgot_password():
     finally:
         conn.close()
     
-    # Generate and send verification code
+    # Generate verification code
     code = generate_verification_code()
-    
-    if send_verification_email(email, code):
-        store_verification_code(email, code)
+
+    store_verification_code(email, code)
+
+    if current_app.debug:
+        ok = send_verification_email(email, code)
+        if not ok:
+            return jsonify({"status": "error", "message": "Failed to send email"}), 500
         return jsonify({
-            "status": "success", 
+            "status": "success",
             "message": "Verification code sent to your email",
             "username": user["username"]
         }), 200
-    else:
-        return jsonify({"status": "error", "message": "Failed to send email"}), 500
+
+    app_obj = current_app._get_current_object()
+
+    def _send_in_background():
+        with app_obj.app_context():
+            try:
+                ok = send_verification_email(email, code)
+                if not ok:
+                    app_obj.logger.warning("Failed to send forgot-password email to %s", email)
+            except Exception:
+                app_obj.logger.exception("Error sending forgot-password email")
+
+    threading.Thread(target=_send_in_background, daemon=True).start()
+    return jsonify({
+        "status": "success",
+        "message": "Verification code sent to your email",
+        "username": user["username"]
+    }), 200
 
 # -------------------------------
 # Reset Password
