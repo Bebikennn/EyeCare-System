@@ -19,24 +19,19 @@ MYSQL_DB = os.getenv('MYSQL_DB', 'eyecare_db')
 # Email Configuration (SMTP)
 #
 # Notes:
-# - Render often blocks consumer SMTP (e.g. Gmail). Prefer Mailjet/SendGrid.
-# - Mailjet SMTP uses host `in-v3.mailjet.com` and credentials = API key/secret.
+# - Render often blocks consumer SMTP (e.g. Gmail). Prefer SendGrid HTTP API.
 # ===========================================
-_mailjet_smtp_user = (os.getenv('MAILJET_SMTP_USERNAME') or os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API') or '').strip()
-_mailjet_smtp_pass = (os.getenv('MAILJET_SMTP_PASSWORD') or os.getenv('MAILJET_API_SECRET') or '').strip()
+MAIL_USERNAME = (os.getenv('MAIL_USERNAME') or '').strip()
+MAIL_PASSWORD = (os.getenv('MAIL_PASSWORD') or '').strip()
 
-MAIL_USERNAME = (os.getenv('MAIL_USERNAME') or _mailjet_smtp_user).strip()
-MAIL_PASSWORD = (os.getenv('MAIL_PASSWORD') or _mailjet_smtp_pass).strip()
-
-_default_smtp_server = 'in-v3.mailjet.com' if (MAIL_USERNAME and MAIL_PASSWORD and _mailjet_smtp_user and _mailjet_smtp_pass) else 'smtp.gmail.com'
-MAIL_SERVER = os.getenv('MAIL_SERVER', _default_smtp_server)
+MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.sendgrid.net')
 MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
 MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
 MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
 
 MAIL_DEFAULT_SENDER = os.getenv(
 	'MAIL_DEFAULT_SENDER',
-	(os.getenv('MAILJET_FROM_EMAIL') or MAIL_USERNAME or 'noreply@eyecare.com'),
+	(MAIL_USERNAME or 'noreply@eyecare.com'),
 )
 
 # ===========================================

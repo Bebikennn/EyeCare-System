@@ -102,11 +102,10 @@ app.config['MAIL_PASSWORD'] = config.MAIL_PASSWORD
 app.config['MAIL_DEFAULT_SENDER'] = config.MAIL_DEFAULT_SENDER
 
 if config.FLASK_ENV == 'production':
-    mailjet_ok = bool((os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API')) and os.getenv('MAILJET_API_SECRET') and (os.getenv('MAILJET_FROM_EMAIL') or app.config.get('MAIL_DEFAULT_SENDER')))
     sendgrid_ok = bool(os.getenv('SENDGRID_API_KEY') and (os.getenv('SENDGRID_FROM_EMAIL') or app.config.get('MAIL_DEFAULT_SENDER')))
     smtp_ok = bool(config.MAIL_USERNAME and config.MAIL_PASSWORD)
-    if not (mailjet_ok or sendgrid_ok or smtp_ok):
-        app.logger.warning('Email is not configured (Mailjet/SendGrid/SMTP missing). Verification emails will fail.')
+    if not (sendgrid_ok or smtp_ok):
+        app.logger.warning('Email is not configured (SendGrid/SMTP missing). Verification emails will fail.')
 
 # Initialize mail with app
 mail.init_app(app)

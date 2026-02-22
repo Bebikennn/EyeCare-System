@@ -20,13 +20,6 @@ def generate_verification_code():
     return ''.join(random.choices(string.digits, k=6))
 
 
-def _is_mailjet_configured() -> bool:
-    api_key = (os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API') or '').strip()
-    api_secret = (os.getenv('MAILJET_API_SECRET') or '').strip()
-    from_email = (os.getenv('MAILJET_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
-    return bool(api_key and api_secret and from_email)
-
-
 def _is_sendgrid_configured() -> bool:
     api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
     from_email = (os.getenv('SENDGRID_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
@@ -81,81 +74,6 @@ def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
             logging.getLogger(__name__).exception('SendGrid request failed')
         return False
 
-
-def _send_via_mailjet(*, to_email: str, subject: str, html: str) -> bool:
-    # Support both variable names to reduce deploy friction.
-    api_key = (os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API') or '').strip()
-    api_secret = (os.getenv('MAILJET_API_SECRET') or '').strip()
-    from_email = (os.getenv('MAILJET_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
-    from_name = (os.getenv('MAILJET_FROM_NAME') or 'EyeCare').strip()
-
-    if not api_key or not api_secret or not from_email:
-        return False
-
-    payload = {
-        'Messages': [
-            {
-                'From': {'Email': from_email, 'Name': from_name},
-                'To': [{'Email': to_email}],
-                'Subject': subject,
-                'HTMLPart': html,
-            }
-        ]
-    }
-
-    base_urls_raw = (os.getenv('MAILJET_BASE_URLS') or os.getenv('MAILJET_BASE_URL') or '').strip()
-    if base_urls_raw:
-        base_urls = [u.strip() for u in base_urls_raw.split(',') if u.strip()]
-    else:
-        # Try the default endpoint first, then the EU endpoint.
-        base_urls = ['https://api.mailjet.com', 'https://api.eu.mailjet.com']
-
-    try:
-        for base_url in base_urls:
-            url = f"{base_url.rstrip('/')}/v3.1/send"
-            try:
-                resp = requests.post(
-                    url,
-                    auth=(api_key, api_secret),
-                    json=payload,
-                    headers={'User-Agent': 'EyeCareBackend/1.0'},
-                    timeout=(5, 20),
-                )
-
-                if 200 <= resp.status_code < 300:
-                    return True
-
-                try:
-                    body = resp.text
-                except Exception:
-                    body = '<unreadable response body>'
-
-                try:
-                    from flask import current_app
-                    current_app.logger.error('Mailjet error %s (%s): %s', resp.status_code, url, body)
-                except Exception:
-                    logging.getLogger(__name__).error('Mailjet error %s (%s): %s', resp.status_code, url, body)
-
-                # HTTP-level error; no point trying other base URLs.
-                return False
-            except requests.exceptions.ConnectionError:
-                # Network/TLS issues: try the next base URL.
-                try:
-                    from flask import current_app
-                    current_app.logger.exception('Mailjet connection failed (%s)', url)
-                except Exception:
-                    logging.getLogger(__name__).exception('Mailjet connection failed (%s)', url)
-                continue
-
-        return False
-    except Exception:
-        try:
-            from flask import current_app
-            current_app.logger.exception('Mailjet request failed')
-        except Exception:
-            logging.getLogger(__name__).exception('Mailjet request failed')
-        return False
-
 def send_verification_email(email, code, *, raise_on_error: bool = False):
     """Send verification code to user's email.
 
@@ -163,7 +81,6 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
     """
     try:
         provider = (os.getenv('EMAIL_PROVIDER') or 'auto').strip().lower()
-        force_smtp = (os.getenv('MAILJET_USE_SMTP') or '').strip().lower() in ('1', 'true', 'yes')
 
         subject = "EyeCare - Email Verification Code"
         html = f"""
@@ -182,7 +99,6 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             </html>
             """
 
-        mailjet_configured = _is_mailjet_configured()
         sendgrid_configured = _is_sendgrid_configured()
 
         smtp_configured = False
@@ -211,16 +127,6 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
                 logging.getLogger(__name__).warning('EMAIL_PROVIDER=sendgrid but SendGrid is not configured or failed')
             return False
 
-        if provider == 'mailjet':
-            if mailjet_configured and _send_via_mailjet(to_email=email, subject=subject, html=html):
-                return True
-            try:
-                from flask import current_app
-                current_app.logger.warning('EMAIL_PROVIDER=mailjet but Mailjet is not configured or failed')
-            except Exception:
-                logging.getLogger(__name__).warning('EMAIL_PROVIDER=mailjet but Mailjet is not configured or failed')
-            return False
-
         # If the deployment is configured to use SMTP, do not attempt HTTP providers.
         if provider == 'smtp':
             if _send_via_smtp():
@@ -231,23 +137,6 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             except Exception:
                 logging.getLogger(__name__).warning('EMAIL_PROVIDER=smtp but SMTP is not configured')
             return False
-
-        # If user explicitly wants SMTP first (common when using Mailjet SMTP), try it first.
-        if force_smtp:
-            try:
-                if _send_via_smtp():
-                    return True
-            except Exception:
-                # Log and continue to HTTP providers.
-                try:
-                    from flask import current_app
-                    current_app.logger.exception('SMTP send failed; falling back to HTTP providers')
-                except Exception:
-                    logging.getLogger(__name__).exception('SMTP send failed; falling back to HTTP providers')
-
-        # Prefer Mailjet HTTP API when configured (Render often blocks outbound SMTP)
-        if mailjet_configured and _send_via_mailjet(to_email=email, subject=subject, html=html):
-            return True
 
         # Prefer SendGrid HTTP API when configured
         if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html):
@@ -260,15 +149,13 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
         try:
             from flask import current_app
             current_app.logger.warning(
-                'No email provider succeeded (Mailjet configured=%s, SendGrid configured=%s, SMTP configured=%s)',
-                mailjet_configured,
+                'No email provider succeeded (SendGrid configured=%s, SMTP configured=%s)',
                 sendgrid_configured,
                 smtp_configured,
             )
         except Exception:
             logging.getLogger(__name__).warning(
-                'No email provider succeeded (Mailjet configured=%s, SendGrid configured=%s, SMTP configured=%s)',
-                mailjet_configured,
+                'No email provider succeeded (SendGrid configured=%s, SMTP configured=%s)',
                 sendgrid_configured,
                 smtp_configured,
             )

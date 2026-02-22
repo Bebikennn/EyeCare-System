@@ -44,17 +44,11 @@ services:
         value: memory://
 
       # Email (SMTP). Required for verification emails.
-      # Prefer Mailjet SMTP on Render (Gmail SMTP is commonly blocked).
-      # Mailjet SMTP:
-      # - MAIL_SERVER=in-v3.mailjet.com
-      # - MAIL_USERNAME=<Mailjet API key>
-      # - MAIL_PASSWORD=<Mailjet secret key>
+      # Prefer SendGrid HTTP API on Render.
       - key: EMAIL_PROVIDER
-        value: auto
-      - key: MAILJET_USE_SMTP
-        value: "False"
+        value: sendgrid
       - key: MAIL_SERVER
-        value: in-v3.mailjet.com
+        value: smtp.sendgrid.net
       - key: MAIL_PORT
         value: "587"
       - key: MAIL_USE_TLS
@@ -74,17 +68,6 @@ services:
       # Must be a verified sender in SendGrid
       - key: SENDGRID_FROM_EMAIL
         sync: false
-
-      # Mailjet (HTTP API, good alternative to SMTP)
-      - key: MAILJET_API_KEY
-        sync: false
-      - key: MAILJET_API_SECRET
-        sync: false
-      # Must be an allowed/validated sender in Mailjet
-      - key: MAILJET_FROM_EMAIL
-        sync: false
-      - key: MAILJET_FROM_NAME
-        value: EyeCare
 
       # Optional monitoring
       - key: SENTRY_DSN
