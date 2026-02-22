@@ -1,12 +1,24 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter_nsd/flutter_nsd.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiService {
-  // Default fallback URL - will be auto-updated when server is discovered
-  static String _baseUrl = 'http://192.168.1.6:5000';
+  static String _normalizeBaseUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+  }
+
+  // Base URL is configured at build time for web via:
+  //   flutter build web --dart-define=API_BASE_URL=...
+  // For safety, default to the Render backend rather than a LAN IP.
+  static String _baseUrl = _normalizeBaseUrl(
+    const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'https://eyecare-backend.onrender.com',
+    ),
+  );
   static const Duration _timeout = Duration(seconds: 10);
 
   static String get baseUrl => _baseUrl;
@@ -15,10 +27,7 @@ class ApiService {
   static Map<String, dynamic> _handleConnectionError(dynamic e) {
     String message;
 
-    if (e is SocketException) {
-      message =
-          'No internet connection. Please check your network and try again.';
-    } else if (e is TimeoutException) {
+    if (e is TimeoutException) {
       message =
           'Connection timed out. Please check your internet connection and try again.';
     } else if (e is http.ClientException) {
@@ -35,88 +44,20 @@ class ApiService {
     return {'status': 'error', 'message': message};
   }
 
-  /// Auto-discover backend server on local network
-  static Future<bool> discoverBackend() async {
-    // mDNS/Zeroconf discovery (no hardcoded IP candidates)
-    final nsd = FlutterNsd();
-    StreamSubscription<NsdServiceInfo>? sub;
-    Timer? timer;
-
-    try {
-      final completer = Completer<bool>();
-
-      sub = nsd.stream.listen(
-        (service) async {
-          final host = _pickBestHost(service);
-          final port = service.port;
-          if (host == null || port == null) return;
-
-          final testUrl = 'http://$host:$port';
-          try {
-            final response = await http
-                .get(Uri.parse('$testUrl/test'))
-                .timeout(_timeout);
-            if (response.statusCode == 200) {
-              _baseUrl = testUrl;
-              print('✅ Backend discovered via mDNS at: $testUrl');
-              if (!completer.isCompleted) completer.complete(true);
-            }
-          } catch (_) {
-            // Ignore and keep listening
-          }
-        },
-        onError: (e) {
-          // Keep going until timeout
-        },
-      );
-
-      // Service type must match backend advertisement
-      await nsd.discoverServices('_eyecare._tcp.');
-
-      timer = Timer(const Duration(seconds: 6), () {
-        if (!completer.isCompleted) completer.complete(false);
-      });
-
-      final ok = await completer.future;
-
-      await nsd.stopDiscovery();
-      await sub.cancel();
-      timer.cancel();
-
-      if (!ok) {
-        print('❌ Could not discover backend via mDNS. Using $_baseUrl');
-      }
-
-      return ok;
-    } catch (e) {
-      try {
-        await nsd.stopDiscovery();
-      } catch (_) {}
-      try {
-        await sub?.cancel();
-      } catch (_) {}
-      try {
-        timer?.cancel();
-      } catch (_) {}
-
-      print('❌ Backend discovery failed: $e');
-      return false;
+  /// Initialize API service (call this on app startup)
+  ///
+  /// In production/web, the backend URL should be provided via `API_BASE_URL`
+  /// at build time. We intentionally do not run local-network discovery on web.
+  static Future<void> initialize() async {
+    if (kIsWeb && (_baseUrl.startsWith('http://192.168.') || _baseUrl.startsWith('http://10.'))) {
+      print('⚠️ Web build is using a LAN IP as API base URL: $_baseUrl');
     }
+    print('🌐 Using API base URL: $_baseUrl');
   }
 
-  static String? _pickBestHost(NsdServiceInfo service) {
-    // Prefer IPv4 addresses when available.
-    final addrs = service.hostAddresses;
-    if (addrs != null && addrs.isNotEmpty) {
-      for (final a in addrs) {
-        if (a.contains(':')) continue; // skip IPv6
-        if (a.startsWith('169.254.')) continue; // link-local
-        return a;
-      }
-      return addrs.first;
-    }
-    // Fallback to hostname (often something like "MYPC.local")
-    return service.hostname;
+  /// Optional local-network discovery (disabled in this build)
+  static Future<bool> discoverBackend() async {
+    return false;
   }
 
   /// Initialize API service (call this on app startup)
@@ -131,7 +72,7 @@ class ApiService {
 
   /// Manually set backend URL
   static Future<void> setBackendUrl(String url) async {
-    _baseUrl = url;
+    _baseUrl = _normalizeBaseUrl(url);
   }
 
   static Future<void> testConnection() async {

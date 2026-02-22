@@ -1,6 +1,8 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'api.dart';
+
 class HealthTip {
   final String title;
   final String emoji;
@@ -49,12 +51,10 @@ class HealthTipsResponse {
 }
 
 class HealthTipsService {
-  static const String _baseUrl = 'http://192.168.1.11:5000';
-
   /// Fetch health tips and risk score for a user
   Future<HealthTipsResponse> getHealthTips(String userId) async {
     try {
-      final url = '$_baseUrl/api/health-tips/user/$userId';
+      final url = '${ApiService.baseUrl}/api/health-tips/user/$userId';
 
       final response = await http.get(
         Uri.parse(url),
@@ -75,7 +75,8 @@ class HealthTipsService {
   /// Fetch personalized health tips based on user's health profile
   Future<HealthTipsResponse> getPersonalizedTips(String userId) async {
     try {
-      final url = '$_baseUrl/api/health-tips/user/$userId/personalized';
+      final url =
+          '${ApiService.baseUrl}/api/health-tips/user/$userId/personalized';
 
       final response = await http.get(
         Uri.parse(url),
@@ -97,7 +98,7 @@ class HealthTipsService {
   /// Get risk score and assessment data for user
   Future<Map<String, dynamic>> getUserRiskAssessment(String userId) async {
     try {
-      final url = '$_baseUrl/api/assessments/user/$userId/latest';
+      final url = '${ApiService.baseUrl}/api/assessments/user/$userId/latest';
 
       final response = await http.get(
         Uri.parse(url),
