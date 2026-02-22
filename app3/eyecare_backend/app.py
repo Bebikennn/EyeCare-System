@@ -101,8 +101,12 @@ app.config['MAIL_USERNAME'] = config.MAIL_USERNAME
 app.config['MAIL_PASSWORD'] = config.MAIL_PASSWORD
 app.config['MAIL_DEFAULT_SENDER'] = config.MAIL_DEFAULT_SENDER
 
-if config.FLASK_ENV == 'production' and (not config.MAIL_USERNAME or not config.MAIL_PASSWORD):
-    app.logger.warning('Email is not configured (MAIL_USERNAME/MAIL_PASSWORD missing). Verification emails will fail.')
+if config.FLASK_ENV == 'production':
+    mailjet_ok = bool((os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API')) and os.getenv('MAILJET_API_SECRET') and (os.getenv('MAILJET_FROM_EMAIL') or app.config.get('MAIL_DEFAULT_SENDER')))
+    sendgrid_ok = bool(os.getenv('SENDGRID_API_KEY') and (os.getenv('SENDGRID_FROM_EMAIL') or app.config.get('MAIL_DEFAULT_SENDER')))
+    smtp_ok = bool(config.MAIL_USERNAME and config.MAIL_PASSWORD)
+    if not (mailjet_ok or sendgrid_ok or smtp_ok):
+        app.logger.warning('Email is not configured (Mailjet/SendGrid/SMTP missing). Verification emails will fail.')
 
 # Initialize mail with app
 mail.init_app(app)
@@ -158,21 +162,24 @@ try:
 except Exception as e:
     app.logger.warning(f"Failed to preload ML model: {e}")
 
-# Advertise backend on the LAN via mDNS (Zeroconf) for automatic discovery
-print("📡 Advertising backend via mDNS (_eyecare._tcp)...")
-try:
-    from services.mdns_service import start_mdns
+# Advertise backend on the LAN via mDNS (Zeroconf) for automatic discovery.
+# IMPORTANT: This opens UDP 5353 and is not suitable for most cloud deployments.
+enable_mdns = (os.getenv('ENABLE_MDNS') or '').strip().lower() in ('1', 'true', 'yes')
+if enable_mdns:
+    print("📡 Advertising backend via mDNS (_eyecare._tcp)...")
+    try:
+        from services.mdns_service import start_mdns
 
-    start_mdns(
-        port=config.PORT,
-        properties={
-            "path": "/test",
-            "service": "eyecare_backend",
-            "version": os.getenv("APP_VERSION", "1.0.0"),
-        },
-    )
-except Exception as e:
-    app.logger.warning(f"Failed to start mDNS advertisement: {e}")
+        start_mdns(
+            port=config.PORT,
+            properties={
+                "path": "/test",
+                "service": "eyecare_backend",
+                "version": os.getenv("APP_VERSION", "1.0.0"),
+            },
+        )
+    except Exception as e:
+        app.logger.warning(f"Failed to start mDNS advertisement: {e}")
 
 def get_local_ip():
     """Get the local IP address of the machine."""

@@ -27,9 +27,51 @@ def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
     if not api_key or not from_email:
         return False
 
+    payload = {
+        'personalizations': [{'to': [{'email': to_email}]}],
+        'from': {'email': from_email},
+        'subject': subject,
+        'content': [{'type': 'text/html', 'value': html}],
+    }
+
+    try:
+        resp = requests.post(
+            'https://api.sendgrid.com/v3/mail/send',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json=payload,
+            timeout=15,
+        )
+        # SendGrid returns 202 Accepted on success
+        if resp.status_code == 202:
+            return True
+
+        try:
+            body = resp.text
+        except Exception:
+            body = '<unreadable response body>'
+
+        try:
+            from flask import current_app
+            current_app.logger.error('SendGrid error %s: %s', resp.status_code, body)
+        except Exception:
+            logging.getLogger(__name__).error('SendGrid error %s: %s', resp.status_code, body)
+
+        return False
+    except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception('SendGrid request failed')
+        except Exception:
+            logging.getLogger(__name__).exception('SendGrid request failed')
+        return False
+
 
 def _send_via_mailjet(*, to_email: str, subject: str, html: str) -> bool:
-    api_key = (os.getenv('MAILJET_API_KEY') or '').strip()
+    # Support both variable names to reduce deploy friction.
+    api_key = (os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API') or '').strip()
     api_secret = (os.getenv('MAILJET_API_SECRET') or '').strip()
     from_email = (os.getenv('MAILJET_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
     from_name = (os.getenv('MAILJET_FROM_NAME') or 'EyeCare').strip()
@@ -79,64 +121,12 @@ def _send_via_mailjet(*, to_email: str, subject: str, html: str) -> bool:
             logging.getLogger(__name__).exception('Mailjet request failed')
         return False
 
-    payload = {
-        'personalizations': [{'to': [{'email': to_email}]}],
-        'from': {'email': from_email},
-        'subject': subject,
-        'content': [{'type': 'text/html', 'value': html}],
-    }
-
-    try:
-        resp = requests.post(
-            'https://api.sendgrid.com/v3/mail/send',
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json',
-            },
-            json=payload,
-            timeout=15,
-        )
-        # SendGrid returns 202 Accepted on success
-        if resp.status_code == 202:
-            return True
-
-        try:
-            body = resp.text
-        except Exception:
-            body = '<unreadable response body>'
-
-        try:
-            from flask import current_app
-            current_app.logger.error('SendGrid error %s: %s', resp.status_code, body)
-        except Exception:
-            logging.getLogger(__name__).error('SendGrid error %s: %s', resp.status_code, body)
-
-        return False
-    except Exception:
-        try:
-            from flask import current_app
-            current_app.logger.exception('SendGrid request failed')
-        except Exception:
-            logging.getLogger(__name__).exception('SendGrid request failed')
-        return False
-
 def send_verification_email(email, code, *, raise_on_error: bool = False):
     """Send verification code to user's email.
 
     If raise_on_error=True, exceptions are re-raised after being logged.
     """
     try:
-        # Fail fast if SMTP isn't configured
-        try:
-            from flask import current_app
-            cfg = current_app.config
-            if not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD'):
-                current_app.logger.warning('SMTP not configured; cannot send verification email')
-                return False
-        except Exception:
-            # No app context available; continue and let Flask-Mail raise if misconfigured.
-            pass
-
         subject = "EyeCare - Email Verification Code"
         html = f"""
             <html>
@@ -163,6 +153,15 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             return True
 
         # Fallback to SMTP via Flask-Mail (useful for local dev)
+        try:
+            from flask import current_app
+            cfg = current_app.config
+            if not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD'):
+                current_app.logger.warning('SMTP not configured; cannot send verification email')
+                return False
+        except Exception:
+            # No app context available; continue and let Flask-Mail raise if misconfigured.
+            pass
         msg = Message(subject=subject, recipients=[email], html=html)
         mail.send(msg)
         return True
