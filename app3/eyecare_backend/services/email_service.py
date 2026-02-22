@@ -27,6 +27,58 @@ def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
     if not api_key or not from_email:
         return False
 
+
+def _send_via_mailjet(*, to_email: str, subject: str, html: str) -> bool:
+    api_key = (os.getenv('MAILJET_API_KEY') or '').strip()
+    api_secret = (os.getenv('MAILJET_API_SECRET') or '').strip()
+    from_email = (os.getenv('MAILJET_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
+    from_name = (os.getenv('MAILJET_FROM_NAME') or 'EyeCare').strip()
+
+    if not api_key or not api_secret or not from_email:
+        return False
+
+    payload = {
+        'Messages': [
+            {
+                'From': {'Email': from_email, 'Name': from_name},
+                'To': [{'Email': to_email}],
+                'Subject': subject,
+                'HTMLPart': html,
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            'https://api.mailjet.com/v3.1/send',
+            auth=(api_key, api_secret),
+            json=payload,
+            timeout=15,
+        )
+
+        if 200 <= resp.status_code < 300:
+            return True
+
+        try:
+            body = resp.text
+        except Exception:
+            body = '<unreadable response body>'
+
+        try:
+            from flask import current_app
+            current_app.logger.error('Mailjet error %s: %s', resp.status_code, body)
+        except Exception:
+            logging.getLogger(__name__).error('Mailjet error %s: %s', resp.status_code, body)
+
+        return False
+    except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception('Mailjet request failed')
+        except Exception:
+            logging.getLogger(__name__).exception('Mailjet request failed')
+        return False
+
     payload = {
         'personalizations': [{'to': [{'email': to_email}]}],
         'from': {'email': from_email},
@@ -102,7 +154,11 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             </html>
             """
 
-        # Prefer SendGrid HTTP API when configured (Render often blocks outbound SMTP)
+        # Prefer Mailjet HTTP API when configured (Render often blocks outbound SMTP)
+        if _send_via_mailjet(to_email=email, subject=subject, html=html):
+            return True
+
+        # Prefer SendGrid HTTP API when configured
         if _send_via_sendgrid(to_email=email, subject=subject, html=html):
             return True
 

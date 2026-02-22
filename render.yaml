@@ -67,6 +67,17 @@ services:
       - key: SENDGRID_FROM_EMAIL
         sync: false
 
+      # Mailjet (HTTP API, good alternative to SMTP)
+      - key: MAILJET_API_KEY
+        sync: false
+      - key: MAILJET_API_SECRET
+        sync: false
+      # Must be an allowed/validated sender in Mailjet
+      - key: MAILJET_FROM_EMAIL
+        sync: false
+      - key: MAILJET_FROM_NAME
+        value: EyeCare
+
       # Optional monitoring
       - key: SENTRY_DSN
         sync: false
