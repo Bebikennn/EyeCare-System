@@ -197,6 +197,12 @@ def get_local_ip():
 # Health Check and Monitoring Endpoints
 # ===============================================
 
+
+@app.route("/", methods=["GET", "HEAD"])
+def root():
+    """Root endpoint for load balancers/port probes."""
+    return jsonify({"status": "ok"}), 200
+
 @app.route("/test", methods=["GET"])
 def health_check():
     """Basic health check endpoint"""
