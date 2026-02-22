@@ -60,16 +60,6 @@ class ApiService {
     return false;
   }
 
-  /// Initialize API service (call this on app startup)
-  static Future<void> initialize() async {
-    // Always try to auto-discover the backend on startup.
-    final ok = await discoverBackend();
-    if (!ok) {
-      // Fall back to whatever _baseUrl is currently set to
-      print('⚠️ Could not automatically discover backend. Using $_baseUrl');
-    }
-  }
-
   /// Manually set backend URL
   static Future<void> setBackendUrl(String url) async {
     _baseUrl = _normalizeBaseUrl(url);
