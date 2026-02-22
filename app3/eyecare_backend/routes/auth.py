@@ -67,7 +67,7 @@ def send_verification_code():
     def _send_in_background():
         with app_obj.app_context():
             try:
-                ok = send_verification_email(email, code)
+                ok = send_verification_email(email, code, raise_on_error=True)
                 if not ok:
                     app_obj.logger.warning("Failed to send verification email to %s", email)
             except Exception:
@@ -242,7 +242,7 @@ def forgot_password():
     def _send_in_background():
         with app_obj.app_context():
             try:
-                ok = send_verification_email(email, code)
+                ok = send_verification_email(email, code, raise_on_error=True)
                 if not ok:
                     app_obj.logger.warning("Failed to send forgot-password email to %s", email)
             except Exception:

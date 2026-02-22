@@ -16,8 +16,11 @@ def generate_verification_code():
     """Generate a 6-digit verification code"""
     return ''.join(random.choices(string.digits, k=6))
 
-def send_verification_email(email, code):
-    """Send verification code to user's email"""
+def send_verification_email(email, code, *, raise_on_error: bool = False):
+    """Send verification code to user's email.
+
+    If raise_on_error=True, exceptions are re-raised after being logged.
+    """
     try:
         # Fail fast if SMTP isn't configured
         try:
@@ -58,6 +61,8 @@ def send_verification_email(email, code):
             current_app.logger.exception('Error sending verification email')
         except Exception:
             logging.getLogger(__name__).exception('Error sending verification email')
+        if raise_on_error:
+            raise
         return False
 
 def store_verification_code(email, code, expiry_minutes=10):
