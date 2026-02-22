@@ -43,6 +43,23 @@ services:
       - key: RATELIMIT_STORAGE_URL
         value: memory://
 
+      # Email (SMTP). Required for verification emails.
+      # For Gmail: use an App Password (2FA required).
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USE_TLS
+        value: "True"
+      - key: MAIL_USE_SSL
+        value: "False"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+        sync: false
+
       # Optional monitoring
       - key: SENTRY_DSN
         sync: false

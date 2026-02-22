@@ -2,6 +2,7 @@
 Email Service for sending verification codes
 """
 from flask_mail import Mail, Message
+import logging
 import random
 import string
 from datetime import datetime, timedelta
@@ -18,6 +19,17 @@ def generate_verification_code():
 def send_verification_email(email, code):
     """Send verification code to user's email"""
     try:
+        # Fail fast if SMTP isn't configured
+        try:
+            from flask import current_app
+            cfg = current_app.config
+            if not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD'):
+                current_app.logger.warning('SMTP not configured; cannot send verification email')
+                return False
+        except Exception:
+            # No app context available; continue and let Flask-Mail raise if misconfigured.
+            pass
+
         msg = Message(
             subject="EyeCare - Email Verification Code",
             recipients=[email],
@@ -40,7 +52,12 @@ def send_verification_email(email, code):
         mail.send(msg)
         return True
     except Exception as e:
-        print(f"Error sending email: {str(e)}")
+        # Use Flask logger when possible so the full traceback appears in Render logs
+        try:
+            from flask import current_app
+            current_app.logger.exception('Error sending verification email')
+        except Exception:
+            logging.getLogger(__name__).exception('Error sending verification email')
         return False
 
 def store_verification_code(email, code, expiry_minutes=10):
