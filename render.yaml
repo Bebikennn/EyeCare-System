@@ -119,15 +119,13 @@ services:
     name: eyecare-web
     runtime: static
     rootDir: app3
-    buildCommand: |
-      set -e
-      if [ ! -d flutter ]; then
-        git clone https://github.com/flutter/flutter.git -b stable --depth 1
-      fi
-      export PATH="$PWD/flutter/bin:$PATH"
-      flutter --version
-      flutter config --enable-web
-      flutter pub get
+    buildCommand: >
+      set -e;
+      if [ ! -d flutter ]; then git clone https://github.com/flutter/flutter.git -b stable --depth 1; fi;
+      export PATH="$PWD/flutter/bin:$PATH";
+      flutter --version;
+      flutter config --enable-web;
+      flutter pub get;
       flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
     staticPublishPath: build/web
     envVars:
