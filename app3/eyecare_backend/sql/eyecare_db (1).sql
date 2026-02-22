@@ -457,7 +457,7 @@ CREATE TABLE `users` (
   `user_id` varchar(36) NOT NULL,
   `username` varchar(100) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `password_hash` varchar(64) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
   `full_name` varchar(255) DEFAULT NULL,
   `phone_number` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,

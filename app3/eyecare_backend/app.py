@@ -13,6 +13,7 @@ from routes.assessment import assessment_bp
 from routes.feedback import feedback_bp
 from routes.notifications import notifications_bp
 from services.email_service import mail
+from services.schema_migrations import ensure_users_password_hash_column
 import config
 import socket
 import logging
@@ -143,6 +144,13 @@ file_handler.setLevel(logging.INFO)
 app.logger.addHandler(file_handler)
 app.logger.setLevel(logging.INFO)
 app.logger.info('EyeCare backend startup')
+
+# Lightweight, idempotent schema migration.
+# Fixes older schemas where users.password_hash was VARCHAR(64).
+try:
+    ensure_users_password_hash_column()
+except Exception:
+    app.logger.exception('Schema migration failed')
 
 # register blueprints
 app.register_blueprint(user_bp)
