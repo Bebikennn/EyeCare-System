@@ -35,6 +35,11 @@ def ensure_users_password_hash_column() -> None:
             if data_type in {"character varying", "varchar"} and (max_len or 0) < 128:
                 cur.execute("ALTER TABLE users ALTER COLUMN password_hash TYPE TEXT")
                 conn.commit()
+                logging.getLogger(__name__).info(
+                    "Expanded users.password_hash to TEXT (was %s(%s))",
+                    data_type,
+                    max_len,
+                )
                 return
 
             return
@@ -46,6 +51,10 @@ def ensure_users_password_hash_column() -> None:
         if "varchar(64" in col_type:
             cur.execute("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL")
             conn.commit()
+            logging.getLogger(__name__).info(
+                "Expanded users.password_hash to VARCHAR(255) (was %s)",
+                col_type,
+            )
 
     except Exception:
         logging.getLogger(__name__).exception("Schema migration failed (users.password_hash)")
