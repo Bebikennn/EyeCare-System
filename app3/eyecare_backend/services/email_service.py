@@ -162,6 +162,9 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
     If raise_on_error=True, exceptions are re-raised after being logged.
     """
     try:
+        provider = (os.getenv('EMAIL_PROVIDER') or 'auto').strip().lower()
+        force_smtp = (os.getenv('MAILJET_USE_SMTP') or '').strip().lower() in ('1', 'true', 'yes')
+
         subject = "EyeCare - Email Verification Code"
         html = f"""
             <html>
@@ -191,6 +194,37 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             # No app context available; assume SMTP may be configured.
             smtp_configured = True
 
+        def _send_via_smtp() -> bool:
+            if not smtp_configured:
+                return False
+            msg = Message(subject=subject, recipients=[email], html=html)
+            mail.send(msg)
+            return True
+
+        # If the deployment is configured to use SMTP, do not attempt HTTP providers.
+        if provider == 'smtp':
+            if _send_via_smtp():
+                return True
+            try:
+                from flask import current_app
+                current_app.logger.warning('EMAIL_PROVIDER=smtp but SMTP is not configured')
+            except Exception:
+                logging.getLogger(__name__).warning('EMAIL_PROVIDER=smtp but SMTP is not configured')
+            return False
+
+        # If user explicitly wants SMTP first (common when using Mailjet SMTP), try it first.
+        if force_smtp:
+            try:
+                if _send_via_smtp():
+                    return True
+            except Exception:
+                # Log and continue to HTTP providers.
+                try:
+                    from flask import current_app
+                    current_app.logger.exception('SMTP send failed; falling back to HTTP providers')
+                except Exception:
+                    logging.getLogger(__name__).exception('SMTP send failed; falling back to HTTP providers')
+
         # Prefer Mailjet HTTP API when configured (Render often blocks outbound SMTP)
         if mailjet_configured and _send_via_mailjet(to_email=email, subject=subject, html=html):
             return True
@@ -201,9 +235,7 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
 
         # Only fall back to SMTP if it's actually configured.
         if smtp_configured:
-            msg = Message(subject=subject, recipients=[email], html=html)
-            mail.send(msg)
-            return True
+            return _send_via_smtp()
 
         try:
             from flask import current_app

@@ -44,9 +44,17 @@ services:
         value: memory://
 
       # Email (SMTP). Required for verification emails.
-      # For Gmail: use an App Password (2FA required).
+      # Prefer Mailjet SMTP on Render (Gmail SMTP is commonly blocked).
+      # Mailjet SMTP:
+      # - MAIL_SERVER=in-v3.mailjet.com
+      # - MAIL_USERNAME=<Mailjet API key>
+      # - MAIL_PASSWORD=<Mailjet secret key>
+      - key: EMAIL_PROVIDER
+        value: auto
+      - key: MAILJET_USE_SMTP
+        value: "False"
       - key: MAIL_SERVER
-        value: smtp.gmail.com
+        value: in-v3.mailjet.com
       - key: MAIL_PORT
         value: "587"
       - key: MAIL_USE_TLS
