@@ -201,6 +201,26 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             mail.send(msg)
             return True
 
+        if provider == 'sendgrid':
+            if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html):
+                return True
+            try:
+                from flask import current_app
+                current_app.logger.warning('EMAIL_PROVIDER=sendgrid but SendGrid is not configured or failed')
+            except Exception:
+                logging.getLogger(__name__).warning('EMAIL_PROVIDER=sendgrid but SendGrid is not configured or failed')
+            return False
+
+        if provider == 'mailjet':
+            if mailjet_configured and _send_via_mailjet(to_email=email, subject=subject, html=html):
+                return True
+            try:
+                from flask import current_app
+                current_app.logger.warning('EMAIL_PROVIDER=mailjet but Mailjet is not configured or failed')
+            except Exception:
+                logging.getLogger(__name__).warning('EMAIL_PROVIDER=mailjet but Mailjet is not configured or failed')
+            return False
+
         # If the deployment is configured to use SMTP, do not attempt HTTP providers.
         if provider == 'smtp':
             if _send_via_smtp():
