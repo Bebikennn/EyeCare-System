@@ -20,6 +20,19 @@ def generate_verification_code():
     return ''.join(random.choices(string.digits, k=6))
 
 
+def _is_mailjet_configured() -> bool:
+    api_key = (os.getenv('MAILJET_API_KEY') or os.getenv('MAILJET_API') or '').strip()
+    api_secret = (os.getenv('MAILJET_API_SECRET') or '').strip()
+    from_email = (os.getenv('MAILJET_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
+    return bool(api_key and api_secret and from_email)
+
+
+def _is_sendgrid_configured() -> bool:
+    api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
+    from_email = (os.getenv('SENDGRID_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
+    return bool(api_key and from_email)
+
+
 def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
     api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
     from_email = (os.getenv('SENDGRID_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
@@ -90,27 +103,49 @@ def _send_via_mailjet(*, to_email: str, subject: str, html: str) -> bool:
         ]
     }
 
+    base_urls_raw = (os.getenv('MAILJET_BASE_URLS') or os.getenv('MAILJET_BASE_URL') or '').strip()
+    if base_urls_raw:
+        base_urls = [u.strip() for u in base_urls_raw.split(',') if u.strip()]
+    else:
+        # Try the default endpoint first, then the EU endpoint.
+        base_urls = ['https://api.mailjet.com', 'https://api.eu.mailjet.com']
+
     try:
-        resp = requests.post(
-            'https://api.mailjet.com/v3.1/send',
-            auth=(api_key, api_secret),
-            json=payload,
-            timeout=15,
-        )
+        for base_url in base_urls:
+            url = f"{base_url.rstrip('/')}/v3.1/send"
+            try:
+                resp = requests.post(
+                    url,
+                    auth=(api_key, api_secret),
+                    json=payload,
+                    headers={'User-Agent': 'EyeCareBackend/1.0'},
+                    timeout=(5, 20),
+                )
 
-        if 200 <= resp.status_code < 300:
-            return True
+                if 200 <= resp.status_code < 300:
+                    return True
 
-        try:
-            body = resp.text
-        except Exception:
-            body = '<unreadable response body>'
+                try:
+                    body = resp.text
+                except Exception:
+                    body = '<unreadable response body>'
 
-        try:
-            from flask import current_app
-            current_app.logger.error('Mailjet error %s: %s', resp.status_code, body)
-        except Exception:
-            logging.getLogger(__name__).error('Mailjet error %s: %s', resp.status_code, body)
+                try:
+                    from flask import current_app
+                    current_app.logger.error('Mailjet error %s (%s): %s', resp.status_code, url, body)
+                except Exception:
+                    logging.getLogger(__name__).error('Mailjet error %s (%s): %s', resp.status_code, url, body)
+
+                # HTTP-level error; no point trying other base URLs.
+                return False
+            except requests.exceptions.ConnectionError:
+                # Network/TLS issues: try the next base URL.
+                try:
+                    from flask import current_app
+                    current_app.logger.exception('Mailjet connection failed (%s)', url)
+                except Exception:
+                    logging.getLogger(__name__).exception('Mailjet connection failed (%s)', url)
+                continue
 
         return False
     except Exception:
@@ -144,27 +179,49 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             </html>
             """
 
-        # Prefer Mailjet HTTP API when configured (Render often blocks outbound SMTP)
-        if _send_via_mailjet(to_email=email, subject=subject, html=html):
-            return True
+        mailjet_configured = _is_mailjet_configured()
+        sendgrid_configured = _is_sendgrid_configured()
 
-        # Prefer SendGrid HTTP API when configured
-        if _send_via_sendgrid(to_email=email, subject=subject, html=html):
-            return True
-
-        # Fallback to SMTP via Flask-Mail (useful for local dev)
+        smtp_configured = False
         try:
             from flask import current_app
             cfg = current_app.config
-            if not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD'):
-                current_app.logger.warning('SMTP not configured; cannot send verification email')
-                return False
+            smtp_configured = bool(cfg.get('MAIL_USERNAME') and cfg.get('MAIL_PASSWORD'))
         except Exception:
-            # No app context available; continue and let Flask-Mail raise if misconfigured.
-            pass
-        msg = Message(subject=subject, recipients=[email], html=html)
-        mail.send(msg)
-        return True
+            # No app context available; assume SMTP may be configured.
+            smtp_configured = True
+
+        # Prefer Mailjet HTTP API when configured (Render often blocks outbound SMTP)
+        if mailjet_configured and _send_via_mailjet(to_email=email, subject=subject, html=html):
+            return True
+
+        # Prefer SendGrid HTTP API when configured
+        if sendgrid_configured and _send_via_sendgrid(to_email=email, subject=subject, html=html):
+            return True
+
+        # Only fall back to SMTP if it's actually configured.
+        if smtp_configured:
+            msg = Message(subject=subject, recipients=[email], html=html)
+            mail.send(msg)
+            return True
+
+        try:
+            from flask import current_app
+            current_app.logger.warning(
+                'No email provider succeeded (Mailjet configured=%s, SendGrid configured=%s, SMTP configured=%s)',
+                mailjet_configured,
+                sendgrid_configured,
+                smtp_configured,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                'No email provider succeeded (Mailjet configured=%s, SendGrid configured=%s, SMTP configured=%s)',
+                mailjet_configured,
+                sendgrid_configured,
+                smtp_configured,
+            )
+
+        return False
     except Exception as e:
         # Use Flask logger when possible so the full traceback appears in Render logs
         try:
