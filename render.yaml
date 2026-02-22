@@ -60,6 +60,13 @@ services:
       - key: MAIL_DEFAULT_SENDER
         sync: false
 
+      # SendGrid (recommended on Render because SMTP egress may be blocked)
+      - key: SENDGRID_API_KEY
+        sync: false
+      # Must be a verified sender in SendGrid
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+
       # Optional monitoring
       - key: SENTRY_DSN
         sync: false

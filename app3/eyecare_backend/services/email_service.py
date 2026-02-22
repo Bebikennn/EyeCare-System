@@ -3,9 +3,12 @@ Email Service for sending verification codes
 """
 from flask_mail import Mail, Message
 import logging
+import os
 import random
 import string
 from datetime import datetime, timedelta
+
+import requests
 
 mail = Mail()
 
@@ -15,6 +18,55 @@ verification_codes = {}
 def generate_verification_code():
     """Generate a 6-digit verification code"""
     return ''.join(random.choices(string.digits, k=6))
+
+
+def _send_via_sendgrid(*, to_email: str, subject: str, html: str) -> bool:
+    api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
+    from_email = (os.getenv('SENDGRID_FROM_EMAIL') or os.getenv('MAIL_DEFAULT_SENDER') or '').strip()
+
+    if not api_key or not from_email:
+        return False
+
+    payload = {
+        'personalizations': [{'to': [{'email': to_email}]}],
+        'from': {'email': from_email},
+        'subject': subject,
+        'content': [{'type': 'text/html', 'value': html}],
+    }
+
+    try:
+        resp = requests.post(
+            'https://api.sendgrid.com/v3/mail/send',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json=payload,
+            timeout=15,
+        )
+        # SendGrid returns 202 Accepted on success
+        if resp.status_code == 202:
+            return True
+
+        try:
+            body = resp.text
+        except Exception:
+            body = '<unreadable response body>'
+
+        try:
+            from flask import current_app
+            current_app.logger.error('SendGrid error %s: %s', resp.status_code, body)
+        except Exception:
+            logging.getLogger(__name__).error('SendGrid error %s: %s', resp.status_code, body)
+
+        return False
+    except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception('SendGrid request failed')
+        except Exception:
+            logging.getLogger(__name__).exception('SendGrid request failed')
+        return False
 
 def send_verification_email(email, code, *, raise_on_error: bool = False):
     """Send verification code to user's email.
@@ -33,10 +85,8 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
             # No app context available; continue and let Flask-Mail raise if misconfigured.
             pass
 
-        msg = Message(
-            subject="EyeCare - Email Verification Code",
-            recipients=[email],
-            html=f"""
+        subject = "EyeCare - Email Verification Code"
+        html = f"""
             <html>
                 <body style="font-family: Arial, sans-serif; padding: 20px;">
                     <h2 style="color: #1976d2;">Welcome to EyeCare!</h2>
@@ -51,7 +101,13 @@ def send_verification_email(email, code, *, raise_on_error: bool = False):
                 </body>
             </html>
             """
-        )
+
+        # Prefer SendGrid HTTP API when configured (Render often blocks outbound SMTP)
+        if _send_via_sendgrid(to_email=email, subject=subject, html=html):
+            return True
+
+        # Fallback to SMTP via Flask-Mail (useful for local dev)
+        msg = Message(subject=subject, recipients=[email], html=html)
         mail.send(msg)
         return True
     except Exception as e:
