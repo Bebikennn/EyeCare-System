@@ -36,6 +36,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   bool hasCompletedAssessmentBefore = false;
   bool isCheckingHistory = true;
   List<Question> displayQuestions = [];
+  bool isSubmitting = false;
 
   @override
   void initState() {
@@ -332,6 +333,47 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     );
   }
 
+  Future<void> _showAnalyzingDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return PopScope(
+          canPop: false,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 10),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Analyzing...',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Show loading while checking history
@@ -547,117 +589,143 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                   SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () async {
-                        if (answers[question.id] == null ||
-                            answers[question.id].toString().isEmpty)
-                          return;
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (answers[question.id] == null ||
+                                  answers[question.id].toString().isEmpty)
+                                return;
 
-                        if (index == displayQuestions.length - 1) {
-                          // Show loading
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (_) =>
-                                Center(child: CircularProgressIndicator()),
-                          );
+                              if (index == displayQuestions.length - 1) {
+                                setState(() => isSubmitting = true);
 
-                          // Submit to backend
-                          final result = await submitAssessment();
-                          Navigator.pop(context); // Close loading
+                                // Show analyzing/loading screen
+                                _showAnalyzingDialog();
 
-                          print('Assessment result: $result'); // Debug log
+                                // Submit to backend
+                                Map<String, dynamic> result = const {
+                                  'status': 'error',
+                                  'error': 'Unknown error',
+                                };
+                                try {
+                                  result = await submitAssessment();
+                                } finally {
+                                  if (mounted) {
+                                    Navigator.of(
+                                      context,
+                                      rootNavigator: true,
+                                    ).pop();
+                                    setState(() => isSubmitting = false);
+                                  }
+                                }
 
-                          if (result['status'] == 'success') {
-                            final prediction = result['prediction'] ?? {};
-                            final recommendations =
-                                (result['recommendations'] as List<dynamic>?) ??
-                                [];
+                                print(
+                                  'Assessment result: $result',
+                                ); // Debug log
 
-                            // Extract values with defaults
-                            final riskLevel = prediction['risk_level'] ?? 'Low';
-                            final confidence = (prediction['confidence'] is num)
-                                ? (prediction['confidence'] as num).toDouble()
-                                : 0.0;
-                            final predictedDisease =
-                                prediction['predicted_disease'] ?? 'Unknown';
-                            final conditionRiskFlag =
-                                prediction['condition_risk_flag'] ?? 'N/A';
-                            final assessmentId = result['assessment_id'];
-                            final riskScore = (prediction['risk_score'] is num)
-                                ? (prediction['risk_score'] as num).toDouble()
-                                : null;
-                            final diseaseProbs =
-                                prediction['per_disease_probabilities']
-                                    as Map<String, dynamic>?;
+                                if (result['status'] == 'success') {
+                                  final prediction = result['prediction'] ?? {};
+                                  final recommendations =
+                                      (result['recommendations']
+                                          as List<dynamic>?) ??
+                                      [];
 
-                            // Build factors list from all disease probabilities
-                            List<RiskFactor> factors = [];
-                            if (diseaseProbs != null) {
-                              diseaseProbs.forEach((disease, prob) {
-                                final probability = (prob is num)
-                                    ? prob.toDouble()
-                                    : 0.0;
-                                // Only show diseases with >10% probability
-                                if (probability > 0.1) {
-                                  factors.add(
-                                    RiskFactor(
-                                      name: disease,
-                                      detected: disease == predictedDisease,
-                                      percentage: probability * 100,
+                                  // Extract values with defaults
+                                  final riskLevel =
+                                      prediction['risk_level'] ?? 'Low';
+                                  final confidence =
+                                      (prediction['confidence'] is num)
+                                      ? (prediction['confidence'] as num)
+                                            .toDouble()
+                                      : 0.0;
+                                  final predictedDisease =
+                                      prediction['predicted_disease'] ??
+                                      'Unknown';
+                                  final conditionRiskFlag =
+                                      prediction['condition_risk_flag'] ??
+                                      'N/A';
+                                  final assessmentId = result['assessment_id'];
+                                  final riskScore =
+                                      (prediction['risk_score'] is num)
+                                      ? (prediction['risk_score'] as num)
+                                            .toDouble()
+                                      : null;
+                                  final diseaseProbs =
+                                      prediction['per_disease_probabilities']
+                                          as Map<String, dynamic>?;
+
+                                  // Build factors list from all disease probabilities
+                                  List<RiskFactor> factors = [];
+                                  if (diseaseProbs != null) {
+                                    diseaseProbs.forEach((disease, prob) {
+                                      final probability = (prob is num)
+                                          ? prob.toDouble()
+                                          : 0.0;
+                                      // Only show diseases with >10% probability
+                                      if (probability > 0.1) {
+                                        factors.add(
+                                          RiskFactor(
+                                            name: disease,
+                                            detected:
+                                                disease == predictedDisease,
+                                            percentage: probability * 100,
+                                          ),
+                                        );
+                                      }
+                                    });
+                                    // Sort by percentage descending
+                                    factors.sort(
+                                      (a, b) =>
+                                          b.percentage.compareTo(a.percentage),
+                                    );
+                                  } else {
+                                    // Fallback to single factor
+                                    factors.add(
+                                      RiskFactor(
+                                        name: predictedDisease,
+                                        detected: true,
+                                        percentage: confidence * 100,
+                                      ),
+                                    );
+                                  }
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AssessmentResultScreen(
+                                        riskLevel: riskLevel,
+                                        confidence: confidence,
+                                        factors: factors,
+                                        modelUsed:
+                                            'LightGBM ML Model + Rule-Based Analysis',
+                                        date: DateTime.now().toString().split(
+                                          '.',
+                                        )[0],
+                                        processingTime: 1.2,
+                                        assessmentId: assessmentId,
+                                        recommendations: recommendations,
+                                        diseasesProbabilities: diseaseProbs,
+                                        riskScore: riskScore,
+                                        predictedRisk: predictedDisease,
+                                        conditionRiskFlag: conditionRiskFlag,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Error: ${result['error'] ?? result['message'] ?? 'Failed to submit assessment'}',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                      duration: Duration(seconds: 5),
                                     ),
                                   );
                                 }
-                              });
-                              // Sort by percentage descending
-                              factors.sort(
-                                (a, b) => b.percentage.compareTo(a.percentage),
-                              );
-                            } else {
-                              // Fallback to single factor
-                              factors.add(
-                                RiskFactor(
-                                  name: predictedDisease,
-                                  detected: true,
-                                  percentage: confidence * 100,
-                                ),
-                              );
-                            }
-
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AssessmentResultScreen(
-                                  riskLevel: riskLevel,
-                                  confidence: confidence,
-                                  factors: factors,
-                                  modelUsed:
-                                      'LightGBM ML Model + Rule-Based Analysis',
-                                  date: DateTime.now().toString().split('.')[0],
-                                  processingTime: 1.2,
-                                  assessmentId: assessmentId,
-                                  recommendations: recommendations,
-                                  diseasesProbabilities: diseaseProbs,
-                                  riskScore: riskScore,
-                                  predictedRisk: predictedDisease,
-                                  conditionRiskFlag: conditionRiskFlag,
-                                ),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Error: ${result['error'] ?? result['message'] ?? 'Failed to submit assessment'}',
-                                ),
-                                backgroundColor: Colors.red,
-                                duration: Duration(seconds: 5),
-                              ),
-                            );
-                          }
-                        } else {
-                          setState(() => index++);
-                        }
-                      },
+                              } else {
+                                setState(() => index++);
+                              }
+                            },
                       child: Text(
                         index == displayQuestions.length - 1
                             ? "Finish"
