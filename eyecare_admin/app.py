@@ -202,11 +202,113 @@ from database import db, init_db
 # Initialize database
 db.init_app(app)
 
+
+def _bootstrap_admin_if_configured() -> None:
+    """Create or reset a super-admin account on startup (production only).
+
+    Enable with:
+      BOOTSTRAP_ADMIN_ENABLE=true
+
+    Required vars:
+      BOOTSTRAP_ADMIN_USERNAME
+      BOOTSTRAP_ADMIN_EMAIL
+      BOOTSTRAP_ADMIN_FULL_NAME
+      BOOTSTRAP_ADMIN_PASSWORD
+
+    Optional vars:
+      BOOTSTRAP_ADMIN_ROLE (default: super_admin)
+      BOOTSTRAP_ADMIN_STATUS (default: active)
+      BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE (default: true)
+      BOOTSTRAP_ADMIN_RESET_EXISTING (default: false)
+    """
+
+    if not _IS_PROD_CONFIG:
+        return
+
+    if os.getenv('BOOTSTRAP_ADMIN_ENABLE', '').lower() not in ('1', 'true', 'yes'):
+        return
+
+    username = (os.getenv('BOOTSTRAP_ADMIN_USERNAME') or '').strip()
+    email = (os.getenv('BOOTSTRAP_ADMIN_EMAIL') or '').strip().lower()
+    full_name = (os.getenv('BOOTSTRAP_ADMIN_FULL_NAME') or '').strip()
+    password = os.getenv('BOOTSTRAP_ADMIN_PASSWORD') or ''
+
+    role = (os.getenv('BOOTSTRAP_ADMIN_ROLE') or 'super_admin').strip()
+    status = (os.getenv('BOOTSTRAP_ADMIN_STATUS') or 'active').strip()
+    must_change = os.getenv('BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE', 'true').lower() in (
+        '1', 'true', 'yes'
+    )
+    reset_existing = os.getenv('BOOTSTRAP_ADMIN_RESET_EXISTING', '').lower() in ('1', 'true', 'yes')
+
+    if not all([username, email, full_name, password]):
+        app.logger.error(
+            'BOOTSTRAP_ADMIN_ENABLE set but required BOOTSTRAP_ADMIN_* values are missing; skipping bootstrap.'
+        )
+        return
+
+    with app.app_context():
+        from database import Admin
+
+        try:
+            db.create_all()
+        except Exception as e:
+            app.logger.error(f'Bootstrap admin failed during db.create_all(): {e}')
+            return
+
+        existing_user = Admin.query.filter_by(username=username).first()
+        if existing_user:
+            if not reset_existing:
+                app.logger.warning(
+                    'Bootstrap admin skipped: username already exists. '
+                    'Set BOOTSTRAP_ADMIN_RESET_EXISTING=true to reset it.'
+                )
+                return
+
+            existing_user.email = email
+            existing_user.full_name = full_name
+            existing_user.role = role
+            existing_user.status = status
+            existing_user.must_change_password = must_change
+            existing_user.set_password(password)
+            db.session.commit()
+            app.logger.warning(
+                f'Bootstrap admin reset: username={username} role={role} status={status}. '
+                'Unset BOOTSTRAP_ADMIN_ENABLE now.'
+            )
+            return
+
+        existing_email = Admin.query.filter_by(email=email).first()
+        if existing_email:
+            app.logger.error(
+                'Bootstrap admin failed: email already exists for another account. '
+                'Use a unique BOOTSTRAP_ADMIN_EMAIL.'
+            )
+            return
+
+        admin = Admin(
+            username=username,
+            email=email,
+            full_name=full_name,
+            role=role,
+            status=status,
+            must_change_password=must_change,
+        )
+        admin.set_password(password)
+        db.session.add(admin)
+        db.session.commit()
+        app.logger.warning(
+            f'Bootstrap admin created: username={username} role={role} status={status}. '
+            'Unset BOOTSTRAP_ADMIN_ENABLE now.'
+        )
+
 # Optional one-time-ish DB initialization for production deployments.
 # Enable explicitly via env var so local imports don't unexpectedly mutate DB.
 if os.getenv('AUTO_INIT_DB', '').lower() in ('1', 'true', 'yes'):
     with app.app_context():
         init_db()
+
+# Hosted recovery: create/reset a super-admin on startup when explicitly enabled.
+_bootstrap_admin_if_configured()
 
 # Initialize Mail
 from flask_mail import Mail

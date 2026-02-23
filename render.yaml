@@ -118,6 +118,27 @@ services:
       - key: DEFAULT_ADMIN_FULL_NAME
         value: Super Administrator
 
+      # One-time hosted admin recovery/bootstrap (optional)
+      # Enable temporarily, deploy once, then disable again.
+      - key: BOOTSTRAP_ADMIN_ENABLE
+        sync: false
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_FULL_NAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_ADMIN_ROLE
+        value: super_admin
+      - key: BOOTSTRAP_ADMIN_STATUS
+        value: active
+      - key: BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE
+        value: "true"
+      - key: BOOTSTRAP_ADMIN_RESET_EXISTING
+        value: "false"
+
       # Cookies / URL scheme
       - key: SESSION_COOKIE_SECURE
         value: "True"
