@@ -214,3 +214,53 @@ def ensure_core_tables() -> None:
                 conn.close()
         except Exception:
             pass
+
+
+def ensure_users_columns() -> None:
+    """Ensure commonly-used columns exist on `users`.
+
+    Some deployments have an older/minimal `users` table. Routes expect columns
+    like address/profile_picture_url/status.
+    """
+
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        if DB_DIALECT == "postgres":
+            # Safe in Postgres
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP")
+            conn.commit()
+            return
+
+        # MySQL: check first (older MySQL doesn't support ADD COLUMN IF NOT EXISTS reliably)
+        cur.execute("SHOW COLUMNS FROM users")
+        rows = cur.fetchall() or []
+        existing = {str(r.get('Field') or r.get('field') or '').lower() for r in rows}
+
+        def _add(name: str, ddl: str) -> None:
+            if name.lower() not in existing:
+                cur.execute(ddl)
+
+        _add('phone_number', "ALTER TABLE users ADD COLUMN phone_number VARCHAR(32) NULL")
+        _add('full_name', "ALTER TABLE users ADD COLUMN full_name VARCHAR(255) NULL")
+        _add('address', "ALTER TABLE users ADD COLUMN address TEXT NULL")
+        _add('profile_picture_url', "ALTER TABLE users ADD COLUMN profile_picture_url VARCHAR(500) NULL")
+        _add('status', "ALTER TABLE users ADD COLUMN status VARCHAR(50) NULL")
+        conn.commit()
+
+    except Exception:
+        logging.getLogger(__name__).exception("Schema migration failed (users columns)")
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass

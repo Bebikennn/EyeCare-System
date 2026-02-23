@@ -13,7 +13,7 @@ from routes.assessment import assessment_bp
 from routes.feedback import feedback_bp
 from routes.notifications import notifications_bp
 from services.email_service import mail
-from services.schema_migrations import ensure_core_tables, ensure_users_password_hash_column
+from services.schema_migrations import ensure_core_tables, ensure_users_columns, ensure_users_password_hash_column
 import config
 import socket
 import logging
@@ -151,6 +151,11 @@ try:
     ensure_users_password_hash_column()
 except Exception:
     app.logger.exception('Schema migration failed')
+
+try:
+    ensure_users_columns()
+except Exception:
+    app.logger.exception('Users column migration failed')
 
 # Ensure core tables exist (notably for fresh Postgres databases).
 try:
