@@ -246,6 +246,22 @@ class Admin(db.Model):
             'last_login': self.last_login.isoformat() if self.last_login else None
         }
 
+
+class AdminPasswordResetOTP(db.Model):
+    """One-time password records for admin forgot-password flow."""
+    __tablename__ = 'admin_password_reset_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('admins.id'), nullable=False, index=True)
+    otp_hash = db.Column(db.String(255), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    consumed = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    consumed_at = db.Column(db.DateTime)
+
+    admin = db.relationship('Admin', backref=db.backref('password_reset_otps', lazy=True))
+
 class ActivityLog(db.Model):
     """Activity logs for admin actions"""
     __tablename__ = 'activity_logs'

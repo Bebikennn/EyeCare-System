@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, session, current_app, url_for
 from flask_mail import Message, Mail
-from database import db, Admin, ActivityLog
-from datetime import datetime, timezone
+from database import db, Admin, ActivityLog, AdminPasswordResetOTP
+from datetime import datetime, timezone, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import secrets
 
 import requests
 auth_bp = Blueprint('auth', __name__)
@@ -59,6 +61,16 @@ def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, ht
     except Exception:
         current_app.logger.error('SendGrid API request failed', exc_info=True)
         return False
+
+
+def _ensure_admin_otp_table() -> None:
+    """Ensure OTP table exists before use (safe/idempotent)."""
+    AdminPasswordResetOTP.__table__.create(bind=db.engine, checkfirst=True)
+
+
+def _generate_otp_code() -> str:
+    """Generate a zero-padded 6-digit OTP."""
+    return f'{secrets.randbelow(1000000):06d}'
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -250,13 +262,14 @@ def change_password():
         return jsonify({'error': str(e)}), 500
 @auth_bp.route('/forgot-password', methods=['POST'])
 def forgot_password():
-    """Send password reset email"""
+    """Send OTP email for password reset."""
     try:
         data = request.get_json()
         if not data or not data.get('email'):
             return jsonify({'error': 'Email is required'}), 400
         
         email = data.get('email').strip().lower()
+        generic_message = 'If an account exists with this email, a password reset OTP has been sent'
         
         # Find admin by email
         admin = Admin.query.filter_by(email=email).first()
@@ -264,34 +277,40 @@ def forgot_password():
         # Always return success to prevent email enumeration
         # Don't reveal if email exists or not
         if not admin:
-            return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
+            return jsonify({'message': generic_message}), 200
         
         # Check if admin is active
         if admin.status != 'active':
-            return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
-        
-        # Generate reset token (signature-based; no DB persistence required)
-        reset_token = admin.generate_reset_token()
+            return jsonify({'message': generic_message}), 200
 
-        # Build reset link from current deployment host.
-        # Prefer https in production.
-        reset_link = url_for(
-            'reset_password_page',
-            token=reset_token,
-            _external=True,
-            _scheme='https' if not current_app.debug else request.scheme,
+        _ensure_admin_otp_table()
+
+        otp_code = _generate_otp_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+        # Replace any prior active OTPs for this admin.
+        AdminPasswordResetOTP.query.filter_by(admin_id=admin.id, consumed=False).delete(synchronize_session=False)
+
+        otp_record = AdminPasswordResetOTP(
+            admin_id=admin.id,
+            otp_hash=generate_password_hash(otp_code),
+            expires_at=expires_at,
+            attempts=0,
+            consumed=False,
         )
+        db.session.add(otp_record)
+        db.session.commit()
         
-        subject = 'Password Reset Request - EyeCare Admin'
+        subject = 'Your EyeCare Admin Password Reset OTP'
         body = f"""
 Hello {admin.full_name},
 
-You requested to reset your password for your EyeCare Admin account.
+You requested to reset your EyeCare Admin password.
 
-Click the link below to reset your password:
-{reset_link}
+Your one-time password (OTP) is:
+{otp_code}
 
-This link will expire in 1 hour.
+This OTP expires in 10 minutes and can only be used once.
 
 If you did not request a password reset, please ignore this email.
 
@@ -301,22 +320,16 @@ EyeCare Admin Team
         html = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-    <h2 style="color: #007bff;">Password Reset Request</h2>
+    <h2 style="color: #007bff;">Password Reset OTP</h2>
     <p>Hello <strong>{admin.full_name}</strong>,</p>
-    <p>You requested to reset your password for your EyeCare Admin account.</p>
-    <p>Click the button below to reset your password:</p>
-    <p style="margin: 30px 0;">
-        <a href="{reset_link}" 
-           style="background-color: #007bff; color: white; padding: 12px 24px; 
-                  text-decoration: none; border-radius: 4px; display: inline-block;">
-            Reset Password
-        </a>
+    <p>You requested to reset your EyeCare Admin password.</p>
+    <p>Use this OTP code to continue:</p>
+    <p style="margin: 20px 0;">
+        <span style="display: inline-block; font-size: 28px; letter-spacing: 6px; font-weight: bold; background: #f4f4f4; padding: 12px 16px; border-radius: 6px;">
+            {otp_code}
+        </span>
     </p>
-    <p>Or copy and paste this link into your browser:</p>
-    <p style="background: #f4f4f4; padding: 10px; border-radius: 4px; word-break: break-all;">
-        {reset_link}
-    </p>
-    <p style="color: #dc3545; font-weight: bold;">This link will expire in 1 hour.</p>
+    <p style="color: #dc3545; font-weight: bold;">This OTP expires in 10 minutes.</p>
     <p>If you did not request a password reset, please ignore this email.</p>
     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
     <p style="color: #666; font-size: 12px;">
@@ -326,7 +339,7 @@ EyeCare Admin Team
 </body>
 </html>
 """
-        
+
         email_sent = False
         provider = (os.getenv('ADMIN_EMAIL_PROVIDER') or 'smtp').strip().lower()
 
@@ -351,16 +364,16 @@ EyeCare Admin Team
                     mail_client.send(msg)
                     email_sent = True
                 except Exception:
-                    current_app.logger.error('Failed to send password reset email (SMTP)', exc_info=True)
+                    current_app.logger.error('Failed to send password reset OTP email (SMTP)', exc_info=True)
             else:
-                current_app.logger.warning('Mail extension not initialized; cannot send reset email')
+                current_app.logger.warning('Mail extension not initialized; cannot send reset OTP email')
 
         # Log activity
         log = ActivityLog(
             admin_id=admin.id,
-            action='Password Reset Requested',
+            action='Password Reset OTP Requested',
             entity_type='auth',
-            details='Password reset email sent' if email_sent else 'Password reset requested (email send failed)',
+            details='Password reset OTP email sent' if email_sent else 'Password reset OTP requested (email send failed)',
             ip_address=request.remote_addr
         )
         try:
@@ -369,63 +382,116 @@ EyeCare Admin Team
         except Exception:
             # Best-effort logging only; never fail password-reset response.
             db.session.rollback()
-            current_app.logger.error('Failed to write activity log for forgot-password', exc_info=True)
-        
-        return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
-        
+            current_app.logger.error('Failed to write activity log for forgot-password OTP', exc_info=True)
+
+        return jsonify({'message': generic_message}), 200
+
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f'Forgot password error: {str(e)}', exc_info=True)
         # Keep generic success response to avoid account/email enumeration and UI hard failures.
-        return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
+        return jsonify({'message': 'If an account exists with this email, a password reset OTP has been sent'}), 200
+
 
 @auth_bp.route('/reset-password', methods=['POST'])
 def reset_password():
-    """Reset password with token"""
+    """Reset password with OTP (or legacy token)."""
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
-        token = data.get('token')
+
+        token = (data.get('token') or '').strip()
         new_password = data.get('new_password')
         confirm_password = data.get('confirm_password')
-        
-        if not all([token, new_password, confirm_password]):
+
+        if not all([new_password, confirm_password]):
             return jsonify({'error': 'All fields are required'}), 400
-        
+
         if new_password != confirm_password:
             return jsonify({'error': 'Passwords do not match'}), 400
-        
-        admin = Admin.get_by_reset_token(token)
-        if not admin or not admin.verify_reset_token(token):
-            return jsonify({'error': 'Invalid or expired reset token'}), 400
-        
+
         # Validate new password
         from utils.password_validator import validate_password
         is_valid, message = validate_password(new_password)
         if not is_valid:
             return jsonify({'error': message}), 400
-        
-        # Update password
+
+        if token:
+            admin = Admin.get_by_reset_token(token)
+            if not admin or not admin.verify_reset_token(token):
+                return jsonify({'error': 'Invalid or expired reset token'}), 400
+
+            admin.set_password(new_password)
+            admin.clear_reset_token()
+            admin.must_change_password = False
+            db.session.commit()
+
+            log = ActivityLog(
+                admin_id=admin.id,
+                action='Password Reset Completed',
+                entity_type='auth',
+                details='Password successfully reset via email token',
+                ip_address=request.remote_addr
+            )
+            db.session.add(log)
+            db.session.commit()
+
+            return jsonify({'message': 'Password has been reset successfully. You can now login with your new password.'}), 200
+
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required'}), 400
+
+        admin = Admin.query.filter_by(email=email, status='active').first()
+        if not admin:
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        _ensure_admin_otp_table()
+
+        now = datetime.now(timezone.utc)
+        otp_record = (
+            AdminPasswordResetOTP.query
+            .filter(
+                AdminPasswordResetOTP.admin_id == admin.id,
+                AdminPasswordResetOTP.consumed.is_(False),
+                AdminPasswordResetOTP.expires_at > now,
+            )
+            .order_by(AdminPasswordResetOTP.created_at.desc())
+            .first()
+        )
+
+        if not otp_record:
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        if otp_record.attempts >= 5:
+            return jsonify({'error': 'Too many invalid attempts. Please request a new OTP.'}), 429
+
+        if not check_password_hash(otp_record.otp_hash, otp):
+            otp_record.attempts = (otp_record.attempts or 0) + 1
+            db.session.commit()
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
         admin.set_password(new_password)
-        admin.clear_reset_token()
         admin.must_change_password = False
-        db.session.commit()
-        
-        # Log activity
+
+        otp_record.consumed = True
+        otp_record.consumed_at = now
+
         log = ActivityLog(
             admin_id=admin.id,
             action='Password Reset Completed',
             entity_type='auth',
-            details='Password successfully reset via email token',
+            details='Password successfully reset via OTP',
             ip_address=request.remote_addr
         )
         db.session.add(log)
         db.session.commit()
-        
+
         return jsonify({'message': 'Password has been reset successfully. You can now login with your new password.'}), 200
-        
+
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f'Reset password error: {str(e)}', exc_info=True)
