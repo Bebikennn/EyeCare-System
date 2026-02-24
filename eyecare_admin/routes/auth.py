@@ -53,6 +53,9 @@ def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, ht
 
         current_app.logger.error('SendGrid API error %s: %s', resp.status_code, resp.text)
         return False
+    except RecursionError:
+        current_app.logger.warning('SendGrid API disabled due to TLS recursion issue in runtime')
+        return False
     except Exception:
         current_app.logger.error('SendGrid API request failed', exc_info=True)
         return False
@@ -325,15 +328,18 @@ EyeCare Admin Team
 """
         
         email_sent = False
-        # Prefer SendGrid HTTP API on Render (avoids SMTP egress timeouts).
-        email_sent = _send_reset_email_via_sendgrid(
-            to_email=admin.email,
-            subject=subject,
-            body=body,
-            html=html,
-        )
+        provider = (os.getenv('ADMIN_EMAIL_PROVIDER') or 'smtp').strip().lower()
 
-        # Fallback to SMTP only when SendGrid HTTP is not configured or fails.
+        # Default to SMTP in admin to avoid runtime TLS recursion issues seen with requests.
+        if provider in ('sendgrid', 'sendgrid_api'):
+            email_sent = _send_reset_email_via_sendgrid(
+                to_email=admin.email,
+                subject=subject,
+                body=body,
+                html=html,
+            )
+
+        # SMTP path (default and fallback)
         if not email_sent:
             msg = Message(subject, recipients=[admin.email])
             msg.body = body
@@ -345,7 +351,7 @@ EyeCare Admin Team
                     mail_client.send(msg)
                     email_sent = True
                 except Exception:
-                    current_app.logger.error('Failed to send password reset email (SMTP fallback)', exc_info=True)
+                    current_app.logger.error('Failed to send password reset email (SMTP)', exc_info=True)
             else:
                 current_app.logger.warning('Mail extension not initialized; cannot send reset email')
 
