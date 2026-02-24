@@ -2,6 +2,9 @@ from flask import Blueprint, request, jsonify, session, current_app, url_for
 from flask_mail import Message, Mail
 from database import db, Admin, ActivityLog
 from datetime import datetime, timezone
+import os
+
+import requests
 auth_bp = Blueprint('auth', __name__)
 
 # Get limiter and mail from current_app extensions
@@ -12,6 +15,47 @@ def get_limiter():
 def get_mail():
     from flask import current_app
     return current_app.extensions.get('mail')
+
+
+def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, html: str) -> bool:
+    api_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
+    from_email = (
+        os.getenv('SENDGRID_FROM_EMAIL')
+        or os.getenv('MAIL_DEFAULT_SENDER')
+        or ''
+    ).strip()
+
+    if not api_key or not from_email:
+        return False
+
+    payload = {
+        'personalizations': [{'to': [{'email': to_email}]}],
+        'from': {'email': from_email},
+        'subject': subject,
+        'content': [
+            {'type': 'text/plain', 'value': body},
+            {'type': 'text/html', 'value': html},
+        ],
+    }
+
+    try:
+        resp = requests.post(
+            'https://api.sendgrid.com/v3/mail/send',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json=payload,
+            timeout=15,
+        )
+        if resp.status_code == 202:
+            return True
+
+        current_app.logger.error('SendGrid API error %s: %s', resp.status_code, resp.text)
+        return False
+    except Exception:
+        current_app.logger.error('SendGrid API request failed', exc_info=True)
+        return False
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -223,9 +267,8 @@ def forgot_password():
         if admin.status != 'active':
             return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
         
-        # Generate reset token
+        # Generate reset token (signature-based; no DB persistence required)
         reset_token = admin.generate_reset_token()
-        db.session.commit()
 
         # Build reset link from current deployment host.
         # Prefer https in production.
@@ -236,12 +279,8 @@ def forgot_password():
             _scheme='https' if not current_app.debug else request.scheme,
         )
         
-        # Send email
-        msg = Message(
-            'Password Reset Request - EyeCare Admin',
-            recipients=[admin.email]
-        )
-        msg.body = f"""
+        subject = 'Password Reset Request - EyeCare Admin'
+        body = f"""
 Hello {admin.full_name},
 
 You requested to reset your password for your EyeCare Admin account.
@@ -256,7 +295,7 @@ If you did not request a password reset, please ignore this email.
 Best regards,
 EyeCare Admin Team
 """
-        msg.html = f"""
+    html = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
     <h2 style="color: #007bff;">Password Reset Request</h2>
@@ -286,15 +325,29 @@ EyeCare Admin Team
 """
         
         email_sent = False
-        mail_client = get_mail()
-        if mail_client is not None:
-            try:
-                mail_client.send(msg)
-                email_sent = True
-            except Exception:
-                current_app.logger.error('Failed to send password reset email', exc_info=True)
-        else:
-            current_app.logger.warning('Mail extension not initialized; cannot send reset email')
+        # Prefer SendGrid HTTP API on Render (avoids SMTP egress timeouts).
+        email_sent = _send_reset_email_via_sendgrid(
+            to_email=admin.email,
+            subject=subject,
+            body=body,
+            html=html,
+        )
+
+        # Fallback to SMTP only when SendGrid HTTP is not configured or fails.
+        if not email_sent:
+            msg = Message(subject, recipients=[admin.email])
+            msg.body = body
+            msg.html = html
+
+            mail_client = get_mail()
+            if mail_client is not None:
+                try:
+                    mail_client.send(msg)
+                    email_sent = True
+                except Exception:
+                    current_app.logger.error('Failed to send password reset email (SMTP fallback)', exc_info=True)
+            else:
+                current_app.logger.warning('Mail extension not initialized; cannot send reset email')
 
         # Log activity
         log = ActivityLog(
@@ -304,8 +357,13 @@ EyeCare Admin Team
             details='Password reset email sent' if email_sent else 'Password reset requested (email send failed)',
             ip_address=request.remote_addr
         )
-        db.session.add(log)
-        db.session.commit()
+        try:
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            # Best-effort logging only; never fail password-reset response.
+            db.session.rollback()
+            current_app.logger.error('Failed to write activity log for forgot-password', exc_info=True)
         
         return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
         
