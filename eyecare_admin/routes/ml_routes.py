@@ -250,10 +250,12 @@ def retrain_model():
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         
         try:
-            from train_risk_model import train_risk_model
+            from train_risk_model import train_risk_model, resolve_dataset_path
+
+            resolved_dataset = resolve_dataset_path(dataset_file)
 
             # Run training (Stage-1 overall risk only)
-            result = train_risk_model(dataset_path=dataset_file)
+            result = train_risk_model(dataset_path=resolved_dataset)
 
             # Get the newly created metrics
             new_metrics = MLMetrics.query.order_by(MLMetrics.training_date.desc()).first()

@@ -246,7 +246,7 @@
                 
                 const retrainData = await apiRequest('/ml/retrain', {
                     method: 'POST',
-                    body: JSON.stringify({ dataset_file: uploadData.filename })
+                    body: JSON.stringify({ dataset_file: uploadData.filepath || uploadData.filename })
                 });
 
                 // For non-super-admin, backend queues the request for approval

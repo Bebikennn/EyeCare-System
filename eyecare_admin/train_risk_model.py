@@ -37,6 +37,57 @@ DATASET_PATH_DEFAULT = os.path.join("models", "dataset", "EyeConditions_CLEAN_RI
 MODEL_PATH_DEFAULT = os.path.join("models", "risk_model.joblib")
 
 
+def resolve_dataset_path(dataset_path: str | None = None) -> str:
+    """Resolve dataset path from common admin upload/storage locations.
+
+    Accepts:
+    - absolute path
+    - relative path
+    - bare filename (e.g., EyeConditions_CLEAN_RISK.csv)
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    requested = (dataset_path or DATASET_PATH_DEFAULT).strip()
+
+    candidates: list[str] = []
+
+    if os.path.isabs(requested):
+        candidates.append(requested)
+    else:
+        candidates.extend(
+            [
+                requested,
+                os.path.join(base_dir, requested),
+                os.path.join(base_dir, "ml", "datasets", requested),
+                os.path.join(base_dir, "models", "dataset", requested),
+            ]
+        )
+
+    # Also attempt basename in known folders (covers values like `ml/datasets/file.csv`).
+    file_name = os.path.basename(requested)
+    candidates.extend(
+        [
+            os.path.join(base_dir, "ml", "datasets", file_name),
+            os.path.join(base_dir, "models", "dataset", file_name),
+        ]
+    )
+
+    # De-duplicate while preserving order.
+    seen = set()
+    unique_candidates = []
+    for path in candidates:
+        if path not in seen:
+            seen.add(path)
+            unique_candidates.append(path)
+
+    for path in unique_candidates:
+        if os.path.exists(path):
+            return path
+
+    raise FileNotFoundError(
+        f"Dataset not found: {requested}. Tried: {unique_candidates}"
+    )
+
+
 @dataclass
 class TrainResult:
     model_path: str
@@ -101,8 +152,7 @@ def train_risk_model(
     model_path: str = MODEL_PATH_DEFAULT,
     save_metrics_to_db: bool = True,
 ) -> TrainResult:
-    if not os.path.exists(dataset_path):
-        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    dataset_path = resolve_dataset_path(dataset_path)
 
     df = pd.read_csv(dataset_path)
 
