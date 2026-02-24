@@ -295,7 +295,7 @@ If you did not request a password reset, please ignore this email.
 Best regards,
 EyeCare Admin Team
 """
-    html = f"""
+        html = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
     <h2 style="color: #007bff;">Password Reset Request</h2>
