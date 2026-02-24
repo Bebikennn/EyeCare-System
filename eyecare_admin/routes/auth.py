@@ -5,6 +5,8 @@ from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import secrets
+import smtplib
+from email.message import EmailMessage
 
 import requests
 auth_bp = Blueprint('auth', __name__)
@@ -48,7 +50,7 @@ def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, ht
                 'Content-Type': 'application/json',
             },
             json=payload,
-            timeout=15,
+            timeout=6,
         )
         if resp.status_code == 202:
             return True
@@ -60,6 +62,52 @@ def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, ht
         return False
     except Exception:
         current_app.logger.error('SendGrid API request failed', exc_info=True)
+        return False
+
+
+def _send_reset_email_via_smtp(*, to_email: str, subject: str, body: str, html: str) -> bool:
+    """Send reset email via SMTP with short timeout to avoid long UI waits."""
+    server = (current_app.config.get('MAIL_SERVER') or '').strip()
+    port = int(current_app.config.get('MAIL_PORT') or 25)
+    use_tls = bool(current_app.config.get('MAIL_USE_TLS'))
+    username = current_app.config.get('MAIL_USERNAME')
+    password = current_app.config.get('MAIL_PASSWORD')
+    sender = (
+        current_app.config.get('MAIL_DEFAULT_SENDER')
+        or username
+        or 'no-reply@eyecare-admin.local'
+    )
+
+    timeout_seconds = int(os.getenv('ADMIN_SMTP_TIMEOUT', '6'))
+    if timeout_seconds < 1:
+        timeout_seconds = 1
+
+    if not server:
+        current_app.logger.warning('MAIL_SERVER is not configured; cannot send reset OTP email')
+        return False
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = to_email
+    msg.set_content(body)
+    msg.add_alternative(html, subtype='html')
+
+    try:
+        with smtplib.SMTP(server, port, timeout=timeout_seconds) as smtp:
+            smtp.ehlo()
+            if use_tls:
+                smtp.starttls()
+                smtp.ehlo()
+            if username and password:
+                smtp.login(username, password)
+            smtp.send_message(msg)
+        return True
+    except TimeoutError:
+        current_app.logger.warning('SMTP timeout while sending reset OTP email (timeout=%ss)', timeout_seconds)
+        return False
+    except Exception:
+        current_app.logger.error('Failed to send password reset OTP email (SMTP)', exc_info=True)
         return False
 
 
@@ -352,21 +400,14 @@ EyeCare Admin Team
                 html=html,
             )
 
-        # SMTP path (default and fallback)
+        # SMTP path (default and fallback) with short timeout.
         if not email_sent:
-            msg = Message(subject, recipients=[admin.email])
-            msg.body = body
-            msg.html = html
-
-            mail_client = get_mail()
-            if mail_client is not None:
-                try:
-                    mail_client.send(msg)
-                    email_sent = True
-                except Exception:
-                    current_app.logger.error('Failed to send password reset OTP email (SMTP)', exc_info=True)
-            else:
-                current_app.logger.warning('Mail extension not initialized; cannot send reset OTP email')
+            email_sent = _send_reset_email_via_smtp(
+                to_email=admin.email,
+                subject=subject,
+                body=body,
+                html=html,
+            )
 
         # Log activity
         log = ActivityLog(
