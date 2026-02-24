@@ -145,6 +145,20 @@ services:
       - key: PREFERRED_URL_SCHEME
         value: https
 
+      # Admin email (forgot-password/reset emails)
+      - key: MAIL_SERVER
+        value: smtp.sendgrid.net
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USE_TLS
+        value: "True"
+      - key: MAIL_USERNAME
+        value: apikey
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+        sync: false
+
       # Admin CORS (if you need cross-origin access; otherwise can be empty)
       - key: CORS_ORIGINS
         sync: false
