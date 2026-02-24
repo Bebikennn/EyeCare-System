@@ -146,6 +146,8 @@ services:
         value: https
 
       # Admin email (forgot-password/reset emails)
+      - key: ADMIN_EMAIL_PROVIDER
+        value: auto
       - key: MAIL_SERVER
         value: smtp.sendgrid.net
       - key: MAIL_PORT
@@ -158,6 +160,14 @@ services:
         sync: false
       - key: MAIL_DEFAULT_SENDER
         sync: false
+      # SendGrid API (preferred path in auto mode)
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      # Short timeout to avoid long UI waits when SMTP is unreachable
+      - key: ADMIN_SMTP_TIMEOUT
+        value: "6"
 
       # Admin CORS (if you need cross-origin access; otherwise can be empty)
       - key: CORS_ORIGINS

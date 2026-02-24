@@ -7,8 +7,10 @@ import os
 import secrets
 import smtplib
 from email.message import EmailMessage
+import json
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
-import requests
 auth_bp = Blueprint('auth', __name__)
 
 # Get limiter and mail from current_app extensions
@@ -43,19 +45,28 @@ def _send_reset_email_via_sendgrid(*, to_email: str, subject: str, body: str, ht
     }
 
     try:
-        resp = requests.post(
-            'https://api.sendgrid.com/v3/mail/send',
+        req = Request(
+            url='https://api.sendgrid.com/v3/mail/send',
+            data=json.dumps(payload).encode('utf-8'),
+            method='POST',
             headers={
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
             },
-            json=payload,
-            timeout=6,
         )
-        if resp.status_code == 202:
+        with urlopen(req, timeout=6) as response:
+            status = getattr(response, 'status', None) or response.getcode()
+        if status == 202:
             return True
-
-        current_app.logger.error('SendGrid API error %s: %s', resp.status_code, resp.text)
+        current_app.logger.error('SendGrid API error status=%s', status)
+        return False
+    except HTTPError as http_error:
+        body_bytes = http_error.read()
+        body_text = body_bytes.decode('utf-8', errors='replace') if body_bytes else ''
+        current_app.logger.error('SendGrid API HTTP error %s: %s', http_error.code, body_text)
+        return False
+    except URLError as url_error:
+        current_app.logger.error('SendGrid API URL error: %s', url_error)
         return False
     except RecursionError:
         current_app.logger.warning('SendGrid API disabled due to TLS recursion issue in runtime')
@@ -389,10 +400,10 @@ EyeCare Admin Team
 """
 
         email_sent = False
-        provider = (os.getenv('ADMIN_EMAIL_PROVIDER') or 'smtp').strip().lower()
+        provider = (os.getenv('ADMIN_EMAIL_PROVIDER') or 'auto').strip().lower()
 
-        # Default to SMTP in admin to avoid runtime TLS recursion issues seen with requests.
-        if provider in ('sendgrid', 'sendgrid_api'):
+        # Prefer SendGrid API in auto mode when available (more reliable on Render).
+        if provider in ('sendgrid', 'sendgrid_api', 'auto'):
             email_sent = _send_reset_email_via_sendgrid(
                 to_email=admin.email,
                 subject=subject,
@@ -400,8 +411,8 @@ EyeCare Admin Team
                 html=html,
             )
 
-        # SMTP path (default and fallback) with short timeout.
-        if not email_sent:
+        # SMTP fallback with short timeout.
+        if not email_sent and provider in ('smtp', 'sendgrid', 'sendgrid_api', 'auto'):
             email_sent = _send_reset_email_via_smtp(
                 to_email=admin.email,
                 subject=subject,
