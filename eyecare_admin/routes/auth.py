@@ -226,15 +226,15 @@ def forgot_password():
         # Generate reset token
         reset_token = admin.generate_reset_token()
         db.session.commit()
-        
-        # Import Flask-Mail
-        from flask_mail import Mail, Message
-        from flask import current_app
-        
-        mail = Mail(current_app)
-        
-        # Create reset link (adjust domain as needed)
-        reset_link = f"http://192.168.1.8:5001/reset-password?token={reset_token}"
+
+        # Build reset link from current deployment host.
+        # Prefer https in production.
+        reset_link = url_for(
+            'reset_password_page',
+            token=reset_token,
+            _external=True,
+            _scheme='https' if not current_app.debug else request.scheme,
+        )
         
         # Send email
         msg = Message(
@@ -285,14 +285,23 @@ EyeCare Admin Team
 </html>
 """
         
-        get_mail().send(msg)
-        
+        email_sent = False
+        mail_client = get_mail()
+        if mail_client is not None:
+            try:
+                mail_client.send(msg)
+                email_sent = True
+            except Exception:
+                current_app.logger.error('Failed to send password reset email', exc_info=True)
+        else:
+            current_app.logger.warning('Mail extension not initialized; cannot send reset email')
+
         # Log activity
         log = ActivityLog(
             admin_id=admin.id,
             action='Password Reset Requested',
             entity_type='auth',
-            details='Password reset email sent',
+            details='Password reset email sent' if email_sent else 'Password reset requested (email send failed)',
             ip_address=request.remote_addr
         )
         db.session.add(log)
@@ -303,7 +312,8 @@ EyeCare Admin Team
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f'Forgot password error: {str(e)}', exc_info=True)
-        return jsonify({'error': 'Failed to process request. Please try again later.'}), 500
+        # Keep generic success response to avoid account/email enumeration and UI hard failures.
+        return jsonify({'message': 'If an account exists with this email, a password reset link has been sent'}), 200
 
 @auth_bp.route('/reset-password', methods=['POST'])
 def reset_password():
