@@ -70,13 +70,16 @@ def get_users():
                 )
             )
         
-        # Status filter
-        status = request.args.get('status', '').strip()
+        # Status filter (legacy-safe):
+        # - treat NULL status as active
+        # - compare status case-insensitively
+        status = request.args.get('status', '').strip().lower()
+        normalized_status = db.func.lower(db.func.coalesce(User.status, 'active'))
         if status:
-            query = query.filter(User.status == status)
+            query = query.filter(normalized_status == status)
         else:
             # Default: hide archived users from the main list
-            query = query.filter(User.status != 'archived')
+            query = query.filter(normalized_status != 'archived')
         
         # Date range filter
         start_date = request.args.get('start_date', '')
